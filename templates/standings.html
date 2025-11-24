@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NHL Standings - NHL Fan Hub</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    primary: '#0d47a1',
+                    secondary: '#1565c0',
+                    accent: '#ffb300'
+                }
+            }
+        }
+    }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+    <div class="max-w-7xl mx-auto px-6 py-8">
+        <header class="bg-gradient-to-r from-primary to-secondary text-white rounded-3xl p-10 shadow-xl relative overflow-hidden mb-8">
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.25),transparent_60%)]"></div>
+            <div class="relative z-10 flex items-center justify-between flex-wrap gap-4">
+                <div>
+                    <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight flex items-center gap-4"><span>🏒</span> NHL Standings</h1>
+                    <p class="mt-3 text-white/90 text-lg font-medium">Current season standings and rankings</p>
+                </div>
+                <a href="/" class="px-6 py-3 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">← Home</a>
+            </div>
+        </header>
+
+        <!-- Filter Buttons -->
+        <div class="mb-8 flex flex-wrap gap-3">
+            <button id="filterLeague" class="filter-btn active px-6 py-3 rounded-lg font-bold transition shadow-md">League</button>
+            <button id="filterEastern" class="filter-btn px-6 py-3 rounded-lg font-bold transition shadow-md">Eastern Conference</button>
+            <button id="filterWestern" class="filter-btn px-6 py-3 rounded-lg font-bold transition shadow-md">Western Conference</button>
+            <button id="filterAtlantic" class="filter-btn px-6 py-3 rounded-lg font-bold transition shadow-md">Atlantic</button>
+            <button id="filterMetropolitan" class="filter-btn px-6 py-3 rounded-lg font-bold transition shadow-md">Metropolitan</button>
+            <button id="filterCentral" class="filter-btn px-6 py-3 rounded-lg font-bold transition shadow-md">Central</button>
+            <button id="filterPacific" class="filter-btn px-6 py-3 rounded-lg font-bold transition shadow-md">Pacific</button>
+        </div>
+
+        <div id="loading" class="text-center text-gray-500 py-12 text-lg">Loading standings...</div>
+        <div id="error" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4"></div>
+
+        <!-- Standings Table -->
+        <div id="standingsContainer" class="hidden">
+            <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full">
+                        <thead class="bg-gradient-to-r from-primary to-secondary text-white">
+                            <tr>
+                                <th class="px-6 py-4 text-left text-sm font-bold uppercase tracking-wider">Rank</th>
+                                <th class="px-6 py-4 text-left text-sm font-bold uppercase tracking-wider">Team</th>
+                                <th class="px-6 py-4 text-center text-sm font-bold uppercase tracking-wider">GP</th>
+                                <th class="px-6 py-4 text-center text-sm font-bold uppercase tracking-wider">W</th>
+                                <th class="px-6 py-4 text-center text-sm font-bold uppercase tracking-wider">L</th>
+                                <th class="px-6 py-4 text-center text-sm font-bold uppercase tracking-wider">OT</th>
+                                <th class="px-6 py-4 text-center text-sm font-bold uppercase tracking-wider">PTS</th>
+                                <th class="px-6 py-4 text-center text-sm font-bold uppercase tracking-wider">P%</th>
+                            </tr>
+                        </thead>
+                        <tbody id="standingsBody" class="divide-y divide-gray-200">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/standings.js"></script>
+</body>
+</html>

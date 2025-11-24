@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player Details - NHL Fan Hub</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    primary: '#0d47a1',
+                    secondary: '#1565c0',
+                    accent: '#ffb300'
+                }
+            }
+        }
+    }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+        <header class="bg-gradient-to-r from-primary to-secondary text-white rounded-2xl p-6 shadow-lg mb-6 relative overflow-hidden">
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.2),transparent_60%)]"></div>
+            <div class="relative z-10 flex items-center justify-between flex-wrap gap-4">
+                <div class="flex items-center gap-4">
+                    <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight flex items-center gap-3"><span>🏒</span> NHL Fan Hub</h1>
+                    <a href="/" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm text-sm">← Teams</a>
+                    <a id="backToTeam" href="#" class="hidden px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm text-sm">← Team</a>
+                </div>
+                <div id="playerPinnedStats" aria-label="Pinned stats" class="flex flex-wrap gap-2"></div>
+            </div>
+        </header>
+
+        <!-- Sticky navigation -->
+        <nav id="playerStickyNav" aria-label="Player sections" class="hidden sticky top-0 z-40 bg-white/90 backdrop-blur-md rounded-xl shadow-md p-2 mb-6 flex gap-2">
+            <button data-target="overview" class="flex-1 px-4 py-2 rounded-lg font-semibold transition bg-primary text-white">Overview</button>
+            <button data-target="seasons" class="flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Seasons</button>
+            <button data-target="awards" class="flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Awards</button>
+        </nav>
+
+        <div id="playerContainer">
+            <div id="loading" class="py-12">
+                <div class="space-y-3">
+                    <div class="h-4 bg-gray-200 rounded animate-pulse w-48"></div>
+                    <div class="h-4 bg-gray-200 rounded animate-pulse w-64"></div>
+                    <div class="h-4 bg-gray-200 rounded animate-pulse w-80"></div>
+                </div>
+            </div>
+            <div id="playerError" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4"></div>
+
+            <div id="playerMain" class="hidden">
+                <!-- Hero -->
+                <section id="playerHero" class="player-hero bg-white rounded-2xl shadow-md overflow-hidden mb-6 relative" aria-labelledby="playerNameHeading">
+                    <!-- Dark overlay for readability when action shot is present -->
+                    <div class="absolute inset-0 bg-gradient-to-br from-black/40 via-black/20 to-transparent pointer-events-none opacity-0 transition-opacity duration-300" id="heroOverlay"></div>
+                    <div class="relative z-10 p-6 md:p-8">
+                        <div class="flex flex-col md:flex-row gap-6 items-start">
+                            <figure class="flex-shrink-0">
+                                <img id="playerPhoto" src="/static/img/placeholder-player.png" alt="Player headshot" loading="lazy" class="w-32 h-32 md:w-40 md:h-40 object-cover rounded-xl shadow-lg ring-4 ring-white/50">
+                            </figure>
+                            <div class="flex-1 min-w-0">
+                                <h2 id="playerName" class="text-3xl md:text-5xl font-extrabold drop-shadow-md text-white" aria-live="polite"></h2>
+                                <div id="playerNumber" class="text-3xl md:text-5xl font-extrabold drop-shadow-md text-white"></div>
+                                <div id="playerPosition" class="text-3xl md:text-5xl font-extrabold drop-shadow-md text-white"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Filters -->
+                <div id="seasonFilters" aria-label="Season filters" class="hidden season-filters flex flex-wrap gap-2 mb-6"></div>
+
+                <!-- Tabs wrapper -->
+                <div id="playerTabs">
+                    <div class="bg-white rounded-2xl shadow-md p-6">
+                        <section id="tab-overview" data-tab="overview" class="tab-panel" aria-labelledby="tabBtnOverview">
+                            <h3 id="tabBtnOverview" class="sr-only">Overview</h3>
+                            <div class="mb-6">
+                                <h3 class="text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">Current Season Key Stats <span class="h-1 w-12 bg-accent rounded-full"></span></h3>
+                                <div id="playerStats"></div>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">Profile <span class="h-1 w-12 bg-accent rounded-full"></span></h3>
+                                <div id="playerMeta" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                            </div>
+                        </section>
+                        <section id="tab-seasons" data-tab="seasons" class="tab-panel hidden" aria-labelledby="tabBtnSeasons">
+                            <h3 id="tabBtnSeasons" class="sr-only">Seasons</h3>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">Season History <span class="h-1 w-12 bg-accent rounded-full"></span></h3>
+                                <div id="playerCareer"></div>
+                            </div>
+                        </section>
+                        <section id="tab-awards" data-tab="awards" class="tab-panel hidden" aria-labelledby="tabBtnAwards">
+                            <h3 id="tabBtnAwards" class="sr-only">Awards</h3>
+                            <div id="playerBadgesSection" class="hidden">
+                                <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">Badges & Awards <span class="h-1 w-12 bg-accent rounded-full"></span></h3>
+                                <div id="playerAwards"></div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/player.js"></script>
+</body>
+</html>

@@ -1,0 +1,182 @@
+package main
+
+import (
+	"embed"
+	"encoding/json"
+	"fmt"
+	"io"
+	"io/fs"
+	"log"
+	"net/http"
+	"path/filepath"
+	"strings"
+
+	"github.com/gorilla/mux"
+)
+
+//go:embed static templates
+var embeddedFiles embed.FS
+
+func main() {
+	router := mux.NewRouter()
+
+	// Static files - serve from embedded FS
+	staticFS, err := fs.Sub(embeddedFiles, "static")
+	if err != nil {
+		log.Fatal(err)
+	}
+	router.PathPrefix("/static/").Handler(
+		http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))),
+	)
+
+	// Routes
+	router.HandleFunc("/", handleIndex).Methods("GET")
+	router.HandleFunc("/standings", handleStandings).Methods("GET")
+	router.HandleFunc("/team/{teamId}", handleTeam).Methods("GET")
+	router.HandleFunc("/player/{playerId}", handlePlayer).Methods("GET")
+	router.HandleFunc("/api/teams", handleAPITeams).Methods("GET")
+	router.HandleFunc("/api/team/{teamId}", handleAPITeamDetails).Methods("GET")
+	router.HandleFunc("/api/roster/{teamId}", handleAPIRoster).Methods("GET")
+	router.HandleFunc("/api/player/{playerId}", handleAPIPlayer).Methods("GET")
+
+	port := "8080"
+	fmt.Printf("Server starting on http://localhost:%s\n", port)
+	if err := http.ListenAndServe(":"+port, router); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func serveEmbeddedFile(w http.ResponseWriter, r *http.Request, filename string) {
+	content, err := embeddedFiles.ReadFile(filepath.Join("templates", filename))
+	if err != nil {
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(content)
+}
+
+func handleIndex(w http.ResponseWriter, r *http.Request) {
+	serveEmbeddedFile(w, r, "index.html")
+}
+
+func handleStandings(w http.ResponseWriter, r *http.Request) {
+	serveEmbeddedFile(w, r, "standings.html")
+}
+
+func handleTeam(w http.ResponseWriter, r *http.Request) {
+	serveEmbeddedFile(w, r, "team.html")
+}
+
+func handlePlayer(w http.ResponseWriter, r *http.Request) {
+	serveEmbeddedFile(w, r, "player.html")
+}
+
+func handleAPITeams(w http.ResponseWriter, r *http.Request) {
+	teams, err := GetAllTeams()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	teams.WriteJSON(w)
+}
+
+func handleAPITeamDetails(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	teamId := vars["teamId"]
+
+	team, err := GetTeamDetails(teamId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	team.WriteJSON(w)
+}
+
+func handleAPIRoster(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	teamId := vars["teamId"]
+
+	roster, err := GetRoster(teamId)
+	if err != nil {
+		// Distinguish not found vs upstream failure
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "unknown team id") || strings.Contains(err.Error(), "status 404") || strings.Contains(err.Error(), "upstream status 404") {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	roster.WriteJSON(w)
+}
+
+func handleAPIPlayer(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	playerId := vars["playerId"]
+
+	// Construct NHL API URL
+	url := fmt.Sprintf("%s/player/%s/landing", BaseURL, playerId)
+
+	body, err := fetchURL(url)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer body.Close()
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	// Parse the JSON to enrich with team abbreviations
+	var playerData map[string]interface{}
+	if err := json.Unmarshal(data, &playerData); err != nil {
+		// If parsing fails, just return raw data
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(data)
+		return
+	}
+
+	// Enrich seasonTotals with team abbreviations
+	if seasonTotals, ok := playerData["seasonTotals"].([]interface{}); ok {
+		for _, seasonEntry := range seasonTotals {
+			if season, ok := seasonEntry.(map[string]interface{}); ok {
+				// Try to get team name and map to abbreviation
+				if teamNameObj, ok := season["teamName"].(map[string]interface{}); ok {
+					if teamName, ok := teamNameObj["default"].(string); ok {
+						if abbrev, exists := teamNameToAbbr[teamName]; exists {
+							season["teamAbbrev"] = abbrev
+						}
+					}
+				}
+				// Fallback: try teamId if available
+				if teamIdFloat, ok := season["teamId"].(float64); ok {
+					teamId := int(teamIdFloat)
+					if abbrev, exists := teamIDToAbbr[teamId]; exists {
+						season["teamAbbrev"] = abbrev
+					}
+				}
+			}
+		}
+	}
+
+	// Return enriched data
+	enrichedData, err := json.Marshal(playerData)
+	if err != nil {
+		// If marshaling fails, return original data
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(data)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(enrichedData)
+}

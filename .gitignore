@@ -1,0 +1,14 @@
+hockey
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
