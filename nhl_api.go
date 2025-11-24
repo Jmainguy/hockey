@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -92,9 +93,13 @@ func GetAllTeams() (*TeamsResponse, error) {
 
 	body, err := fetchURL(url)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch standings: %w", err)
+		return nil, fmt.Errorf("failed to fetch standings for team lookup: %w", err)
 	}
-	defer body.Close()
+	defer func() {
+		if cerr := body.Close(); cerr != nil {
+			log.Printf("Error closing response body: %v", cerr)
+		}
+	}()
 
 	data, err := io.ReadAll(body)
 	if err != nil {
@@ -171,7 +176,13 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 	// Convert team ID to abbreviation
 	var teamAbbr string
 	teamIDInt := 1
-	fmt.Sscanf(teamId, "%d", &teamIDInt)
+	if _, err := fmt.Sscanf(teamId, "%d", &teamIDInt); err != nil {
+		// If not an int, treat as abbreviation
+		teamAbbr = strings.ToUpper(teamId)
+		if id, ok := abbrevToTeamID[teamAbbr]; ok {
+			teamIDInt = id
+		}
+	}
 	if abbr, ok := teamIDToAbbr[teamIDInt]; ok {
 		teamAbbr = abbr
 	} else {
@@ -185,7 +196,11 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch standings: %w", err)
 	}
-	defer body.Close()
+	defer func() {
+		if cerr := body.Close(); cerr != nil {
+			log.Printf("Error closing response body: %v", cerr)
+		}
+	}()
 
 	data, err := io.ReadAll(body)
 	if err != nil {
@@ -266,7 +281,13 @@ func GetRoster(teamId string) (*RosterResponse, error) {
 	// Convert team ID to abbreviation
 	var teamAbbr string
 	teamIDInt := 1
-	fmt.Sscanf(teamId, "%d", &teamIDInt)
+	if _, err := fmt.Sscanf(teamId, "%d", &teamIDInt); err != nil {
+		// If not an int, treat as abbreviation
+		teamAbbr = strings.ToUpper(teamId)
+		if id, ok := abbrevToTeamID[teamAbbr]; ok {
+			teamIDInt = id
+		}
+	}
 	if abbr, ok := teamIDToAbbr[teamIDInt]; ok {
 		teamAbbr = abbr
 	} else {
@@ -293,7 +314,11 @@ func GetRoster(teamId string) (*RosterResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch roster: %w", err)
 	}
-	defer body.Close()
+	defer func() {
+		if cerr := body.Close(); cerr != nil {
+			log.Printf("Error closing response body: %v", cerr)
+		}
+	}()
 
 	data, err := io.ReadAll(body)
 	if err != nil {
@@ -416,7 +441,11 @@ func fetchPlayerData(playerID int, player *PlayerInfo) {
 	if err != nil {
 		return
 	}
-	defer body.Close()
+	defer func() {
+		if cerr := body.Close(); cerr != nil {
+			log.Printf("Error closing response body: %v", cerr)
+		}
+	}()
 
 	data, err := io.ReadAll(body)
 	if err != nil {
@@ -483,7 +512,9 @@ func fetchURL(url string) (io.ReadCloser, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		if cerr := resp.Body.Close(); cerr != nil {
+			log.Printf("Error closing response body: %v", cerr)
+		}
 		return nil, fmt.Errorf("upstream status %d for %s", resp.StatusCode, url)
 	}
 

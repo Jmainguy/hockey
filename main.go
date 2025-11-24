@@ -53,7 +53,9 @@ func serveEmbeddedFile(w http.ResponseWriter, r *http.Request, filename string) 
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(content)
+	if _, err := w.Write(content); err != nil {
+		log.Printf("Error writing response: %v", err)
+	}
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +82,9 @@ func handleAPITeams(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	teams.WriteJSON(w)
+	if err := teams.WriteJSON(w); err != nil {
+		log.Printf("Error writing teams JSON: %v", err)
+	}
 }
 
 func handleAPITeamDetails(w http.ResponseWriter, r *http.Request) {
@@ -94,7 +98,9 @@ func handleAPITeamDetails(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	team.WriteJSON(w)
+	if err := team.WriteJSON(w); err != nil {
+		log.Printf("Error writing team JSON: %v", err)
+	}
 }
 
 func handleAPIRoster(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +119,9 @@ func handleAPIRoster(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	roster.WriteJSON(w)
+	if err := roster.WriteJSON(w); err != nil {
+		log.Printf("Error writing roster JSON: %v", err)
+	}
 }
 
 func handleAPIPlayer(w http.ResponseWriter, r *http.Request) {
@@ -128,7 +136,11 @@ func handleAPIPlayer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	defer body.Close()
+	defer func() {
+		if err := body.Close(); err != nil {
+			log.Printf("Error closing response body: %v", err)
+		}
+	}()
 
 	data, err := io.ReadAll(body)
 	if err != nil {
@@ -141,7 +153,9 @@ func handleAPIPlayer(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(data, &playerData); err != nil {
 		// If parsing fails, just return raw data
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(data)
+		if _, werr := w.Write(data); werr != nil {
+			log.Printf("Error writing response: %v", werr)
+		}
 		return
 	}
 
@@ -173,10 +187,14 @@ func handleAPIPlayer(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// If marshaling fails, return original data
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(data)
+		if _, werr := w.Write(data); werr != nil {
+			log.Printf("Error writing response: %v", werr)
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(enrichedData)
+	if _, err := w.Write(enrichedData); err != nil {
+		log.Printf("Error writing enriched data: %v", err)
+	}
 }
