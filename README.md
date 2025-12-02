@@ -229,3 +229,4 @@ Contributions are welcome! Feel free to:
 **Built with ❤️ for NHL fans everywhere**
 
 *Go support your local team!*
+
