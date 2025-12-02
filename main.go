@@ -33,6 +33,7 @@ func main() {
 	router.HandleFunc("/", handleIndex).Methods("GET")
 	router.HandleFunc("/standings", handleStandings).Methods("GET")
 	router.HandleFunc("/team/{teamId}", handleTeam).Methods("GET")
+	router.HandleFunc("/trivia", handleTrivia).Methods("GET")
 	router.HandleFunc("/player/{playerId}", handlePlayer).Methods("GET")
 	router.HandleFunc("/api/teams", handleAPITeams).Methods("GET")
 	router.HandleFunc("/api/team/{teamId}", handleAPITeamDetails).Methods("GET")
@@ -68,6 +69,10 @@ func handleStandings(w http.ResponseWriter, r *http.Request) {
 
 func handleTeam(w http.ResponseWriter, r *http.Request) {
 	serveEmbeddedFile(w, r, "team.html")
+}
+
+func handleTrivia(w http.ResponseWriter, r *http.Request) {
+	serveEmbeddedFile(w, r, "trivia.html")
 }
 
 func handlePlayer(w http.ResponseWriter, r *http.Request) {

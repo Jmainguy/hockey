@@ -332,3 +332,10 @@ async function showPlayerModal(playerId) {
     closeBtn.onclick = () => { modal.classList.add('hidden'); };
     modal.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
 }
+
+// Trivia button handler
+document.getElementById('triviaBtn')?.addEventListener('click', function() {
+    if (currentTeamId) {
+        window.location.href = `/trivia?team=${currentTeamId}`;
+    }
+});

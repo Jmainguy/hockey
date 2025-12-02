@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Trivia - NHL Fan Hub</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    primary: '#0d47a1',
+                    secondary: '#1565c0',
+                    accent: '#ffb300'
+                }
+            }
+        }
+    }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+        <header class="bg-gradient-to-r from-primary to-secondary text-white rounded-2xl p-6 shadow-lg mb-6 relative overflow-hidden">
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.2),transparent_60%)]"></div>
+            <div class="relative z-10 flex items-center justify-between">
+                <h1 class="text-3xl font-extrabold tracking-tight flex items-center gap-3"><span>🎯</span> Team Trivia</h1>
+                <button id="backToTeam" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">← Back to Team</button>
+            </div>
+        </header>
+
+        <div>
+            <div id="loading" class="text-center py-12 text-gray-500 text-lg">Loading trivia...</div>
+            <div id="error" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4"></div>
+
+            <section id="triviaSection" class="hidden">
+                <div class="bg-white rounded-2xl shadow-md p-6 mb-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 id="teamName" class="text-2xl font-bold text-gray-800"></h2>
+                        <div class="text-sm text-gray-600">
+                            Player <span id="currentQuestion">1</span> of <span id="totalQuestions">0</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mb-6">
+                        <div id="progressBar" class="bg-accent h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-md p-8 relative overflow-hidden">
+                    <!-- Background team logo -->
+                    <div id="teamLogoBg" class="absolute inset-0 bg-contain bg-center bg-no-repeat opacity-10"></div>
+                    
+                    <div class="relative z-10">
+                        <div class="text-center mb-8">
+                            <div class="inline-block relative">
+                                <img id="playerImage" src="" alt="Player" class="w-64 h-64 object-cover rounded-2xl shadow-lg">
+                            </div>
+                        </div>
+
+                        <div class="space-y-4 max-w-md mx-auto">
+                            <div id="nameQuestion" class="hidden bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-4">
+                                <div id="nameLabel" class="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-1">What is their name?</div>
+                                <div id="playerName" class="text-2xl font-bold text-blue-900"></div>
+                            </div>
+
+                            <div id="numberQuestion" class="hidden bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-200 rounded-xl p-4">
+                                <div id="numberLabel" class="text-sm font-semibold text-green-700 uppercase tracking-wider mb-1">What is their number?</div>
+                                <div id="playerNumber" class="text-2xl font-bold text-green-900"></div>
+                            </div>
+
+                            <div id="positionQuestion" class="hidden bg-gradient-to-r from-purple-50 to-purple-100 border-2 border-purple-200 rounded-xl p-4">
+                                <div id="positionLabel" class="text-sm font-semibold text-purple-700 uppercase tracking-wider mb-1">What position do they play?</div>
+                                <div id="playerPosition" class="text-2xl font-bold text-purple-900"></div>
+                            </div>
+
+                            <div id="birthplaceQuestion" class="hidden bg-gradient-to-r from-orange-50 to-orange-100 border-2 border-orange-200 rounded-xl p-4">
+                                <div id="birthplaceLabel" class="text-sm font-semibold text-orange-700 uppercase tracking-wider mb-1">Where were they born?</div>
+                                <div id="playerBirthplace" class="text-2xl font-bold text-orange-900"></div>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4 justify-center mt-8">
+                            <button id="revealBtn" class="px-8 py-3 bg-gradient-to-r from-primary to-secondary text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition">
+                                Reveal Answer
+                            </button>
+                            <button id="nextBtn" class="hidden px-8 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition">
+                                Next Player →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="completionSection" class="hidden bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-200 rounded-2xl shadow-md p-8 text-center">
+                    <div class="text-6xl mb-4">🎉</div>
+                    <h3 class="text-3xl font-bold text-green-900 mb-2">Trivia Complete!</h3>
+                    <p class="text-green-700 mb-6">You've gone through all the players on the roster.</p>
+                    <div class="flex gap-4 justify-center">
+                        <button id="restartBtn" class="px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition">
+                            Start Over
+                        </button>
+                        <button id="backToTeamBtn" class="px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 font-bold rounded-xl shadow hover:shadow-lg transform hover:scale-105 transition">
+                            Back to Team
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="/static/trivia.js"></script>
+</body>
+</html>

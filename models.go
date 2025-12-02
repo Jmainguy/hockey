@@ -60,6 +60,8 @@ type PlayerInfo struct {
 	Position     string       `json:"position"`
 	FullPosition string       `json:"fullPosition"`
 	Photo        string       `json:"photo"`
+	ActionShot   string       `json:"actionShot,omitempty"`
+	BirthPlace   string       `json:"birthPlace,omitempty"`
 	Stats        *PlayerStats `json:"stats"`
 }
 

@@ -453,7 +453,15 @@ func fetchPlayerData(playerID int, player *PlayerInfo) {
 	}
 
 	var playerResp struct {
-		Headshot      string `json:"headshot"`
+		Headshot  string `json:"headshot"`
+		HeroImage string `json:"heroImage"`
+		BirthCity struct {
+			Default string `json:"default"`
+		} `json:"birthCity"`
+		BirthStateProvince struct {
+			Default string `json:"default"`
+		} `json:"birthStateProvince"`
+		BirthCountry  string `json:"birthCountry"`
 		FeaturedStats struct {
 			RegularSeason struct {
 				SubSeason struct {
@@ -479,6 +487,22 @@ func fetchPlayerData(playerID int, player *PlayerInfo) {
 
 	// Set photo
 	player.Photo = playerResp.Headshot
+	player.ActionShot = playerResp.HeroImage
+
+	// Set birth place
+	birthParts := []string{}
+	if playerResp.BirthCity.Default != "" {
+		birthParts = append(birthParts, playerResp.BirthCity.Default)
+	}
+	if playerResp.BirthStateProvince.Default != "" {
+		birthParts = append(birthParts, playerResp.BirthStateProvince.Default)
+	}
+	if playerResp.BirthCountry != "" {
+		birthParts = append(birthParts, playerResp.BirthCountry)
+	}
+	if len(birthParts) > 0 {
+		player.BirthPlace = strings.Join(birthParts, ", ")
+	}
 
 	// Set stats based on position
 	subSeason := playerResp.FeaturedStats.RegularSeason.SubSeason
