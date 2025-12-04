@@ -32,6 +32,7 @@ func main() {
 	// Routes
 	router.HandleFunc("/", handleIndex).Methods("GET")
 	router.HandleFunc("/standings", handleStandings).Methods("GET")
+	router.HandleFunc("/scores", handleScores).Methods("GET")
 	router.HandleFunc("/team/{teamId}", handleTeam).Methods("GET")
 	router.HandleFunc("/trivia", handleTrivia).Methods("GET")
 	router.HandleFunc("/coach", handleCoach).Methods("GET")
@@ -40,6 +41,8 @@ func main() {
 	router.HandleFunc("/api/team/{teamId}", handleAPITeamDetails).Methods("GET")
 	router.HandleFunc("/api/roster/{teamId}", handleAPIRoster).Methods("GET")
 	router.HandleFunc("/api/player/{playerId}", handleAPIPlayer).Methods("GET")
+	router.HandleFunc("/api/schedule/{date}", handleAPISchedule).Methods("GET")
+	router.HandleFunc("/api/gamecenter/{gameId}/landing", handleAPIGameLanding).Methods("GET")
 
 	port := "8080"
 	fmt.Printf("Server starting on http://localhost:%s\n", port)
@@ -66,6 +69,10 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 
 func handleStandings(w http.ResponseWriter, r *http.Request) {
 	serveEmbeddedFile(w, r, "standings.html")
+}
+
+func handleScores(w http.ResponseWriter, r *http.Request) {
+	serveEmbeddedFile(w, r, "scores.html")
 }
 
 func handleTeam(w http.ResponseWriter, r *http.Request) {
@@ -206,5 +213,95 @@ func handleAPIPlayer(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(enrichedData); err != nil {
 		log.Printf("Error writing enriched data: %v", err)
+	}
+}
+
+func handleAPISchedule(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	date := vars["date"]
+
+	// Construct NHL API URL for schedule
+	url := fmt.Sprintf("%s/schedule/%s", BaseURL, date)
+
+	body, err := fetchURL(url)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer func() {
+		if err := body.Close(); err != nil {
+			log.Printf("Error closing response body: %v", err)
+		}
+	}()
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(data); err != nil {
+		log.Printf("Error writing schedule data: %v", err)
+	}
+}
+
+func handleAPIGameBoxscore(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	gameId := vars["gameId"]
+
+	// Construct NHL API URL for game landing (more detailed than boxscore)
+	url := fmt.Sprintf("%s/gamecenter/%s/landing", BaseURL, gameId)
+
+	body, err := fetchURL(url)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer func() {
+		if err := body.Close(); err != nil {
+			log.Printf("Error closing response body: %v", err)
+		}
+	}()
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(data); err != nil {
+		log.Printf("Error writing landing data: %v", err)
+	}
+}
+
+func handleAPIGameLanding(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	gameId := vars["gameId"]
+
+	// Construct NHL API URL for game landing
+	url := fmt.Sprintf("%s/gamecenter/%s/landing", BaseURL, gameId)
+
+	body, err := fetchURL(url)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer func() {
+		if err := body.Close(); err != nil {
+			log.Printf("Error closing response body: %v", err)
+		}
+	}()
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(data); err != nil {
+		log.Printf("Error writing landing data: %v", err)
 	}
 }

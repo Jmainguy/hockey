@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scores & Schedule - NHL Fan Hub</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    primary: '#0d47a1',
+                    secondary: '#1565c0',
+                    accent: '#ffb300'
+                }
+            }
+        }
+    }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <header class="bg-gradient-to-r from-primary to-secondary text-white rounded-2xl p-6 shadow-lg mb-6 relative overflow-hidden">
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.2),transparent_60%)]"></div>
+            <div class="relative z-10 flex items-center justify-between">
+                <h1 class="text-3xl font-extrabold tracking-tight flex items-center gap-3"><span>🏒</span> Scores & Schedule</h1>
+                <div class="flex gap-2">
+                    <a href="/standings" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">Standings</a>
+                    <a href="/" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">Home</a>
+                </div>
+            </div>
+        </header>
+
+        <!-- Date Navigation -->
+        <div class="bg-white rounded-2xl shadow-md p-4 mb-6">
+            <div class="flex items-center justify-between gap-4">
+                <button id="prevDay" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg font-semibold transition">← Previous Day</button>
+                <div class="text-center">
+                    <div id="currentDate" class="text-xl font-bold text-gray-800"></div>
+                    <button id="todayBtn" class="text-sm text-primary hover:text-secondary font-semibold mt-1">Jump to Today</button>
+                </div>
+                <button id="nextDay" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg font-semibold transition">Next Day →</button>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading" class="text-center py-12 text-gray-500 text-lg">Loading games...</div>
+
+        <!-- Error State -->
+        <div id="error" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4"></div>
+
+        <!-- Games Grid -->
+        <div id="gamesContainer" class="hidden">
+            <div id="gamesGrid" class="space-y-4"></div>
+            <div id="noGames" class="hidden text-center py-12 text-gray-500">
+                <div class="text-6xl mb-4">📅</div>
+                <div class="text-xl font-semibold">No games scheduled for this date</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/scores.js"></script>
+</body>
+</html>
