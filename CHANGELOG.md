@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.0](https://github.com/Jmainguy/hockey/compare/v1.1.0...v1.2.0) (2025-12-04)
+
+
+### Features
+
+* add coach page to allow line customization ([59f054e](https://github.com/Jmainguy/hockey/commit/59f054e261291f5e5a575764c7ade871fd3e3689))
+* added scores / schedules to see upcoming games, and past results ([79534d2](https://github.com/Jmainguy/hockey/commit/79534d22cdf8670f52f0bbbb2ee5ec4cb232ca38))
+* added team schedule calander with monthly record ([4e1f20a](https://github.com/Jmainguy/hockey/commit/4e1f20ab592b35c93c2b5193a1244b517fe9521a))
+
+
+### Bug Fixes
+
+* update goalie stats on team roster page ([c6b0359](https://github.com/Jmainguy/hockey/commit/c6b035988226da84d76fd6527373361fdde88355))
+
 ## [1.1.0](https://github.com/Jmainguy/hockey/compare/v1.0.0...v1.1.0) (2025-12-02)
 
 
