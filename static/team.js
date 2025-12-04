@@ -346,3 +346,10 @@ document.getElementById('coachBtn')?.addEventListener('click', function() {
         window.location.href = `/coach?team=${currentTeamId}`;
     }
 });
+
+// Schedule button handler
+document.getElementById('scheduleBtn')?.addEventListener('click', function() {
+    if (currentTeamId) {
+        window.location.href = `/team-schedule/${currentTeamId}`;
+    }
+});

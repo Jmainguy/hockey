@@ -859,3 +859,352 @@ body.action-bg { background-size:cover; background-position:center; background-a
     background: linear-gradient(to right, rgba(239, 68, 68, 0.05), white) !important;
 }
 
+/* Team Schedule Calendar Styles */
+.calendar-day-cell {
+    min-height: 120px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.calendar-day-cell.empty {
+    background: #f9fafb;
+    cursor: default;
+}
+
+.calendar-day-cell.today {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    border-width: 2px;
+}
+
+.calendar-day-cell.has-game {
+    border-color: #d1d5db;
+}
+
+.calendar-day-cell.day-win {
+    background: #d1fae5 !important;
+    border-color: #10b981 !important;
+}
+
+.calendar-day-cell.day-loss {
+    background: #fee2e2 !important;
+    border-color: #ef4444 !important;
+}
+
+.calendar-day-cell.day-otl {
+    background: #fef3c7 !important;
+    border-color: #f59e0b !important;
+}
+
+.calendar-day-cell.has-game:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.day-number {
+    font-weight: 700;
+    color: #374151;
+    margin-bottom: 4px;
+    font-size: 0.875rem;
+}
+
+.games-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.game-item {
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 0.75rem;
+    transition: all 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.game-item-calendar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.game-item-calendar:hover {
+    cursor: pointer;
+}
+
+.game-item:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+}
+
+.game-item.live {
+    background: #fee2e2;
+    border-color: #ef4444;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.game-logos {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+}
+
+.team-logo-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.team-logo-calendar {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+}
+
+.team-abbrev {
+    font-weight: 700;
+    font-size: 0.7rem;
+    color: #374151;
+}
+
+.vs-text {
+    font-weight: 700;
+    color: #6b7280;
+    font-size: 0.8rem;
+}
+
+.game-opponent {
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 2px;
+}
+
+.game-time-result {
+    color: #6b7280;
+    font-size: 0.75rem;
+    text-align: center;
+    font-weight: 600;
+}
+
+.game-score-display {
+    font-weight: 700;
+    color: #1f2937;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.game-result-text {
+    font-weight: 800;
+    font-size: 0.85rem;
+    text-align: center;
+    color: #1f2937;
+}
+
+.game-item.live .game-time-result,
+.game-item.live .game-score-display {
+    color: #ef4444;
+}
+
+/* Game Details Modal */
+.game-detail-header {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.teams-matchup {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 12px;
+}
+
+.team-detail {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+}
+
+.team-logo-large {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+}
+
+.team-name-large {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.team-record {
+    color: #6b7280;
+    font-size: 0.875rem;
+}
+
+.team-score-large {
+    font-size: 3rem;
+    font-weight: 800;
+    color: #0d47a1;
+}
+
+.vs-divider {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #9ca3af;
+}
+
+.section-header {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin-top: 24px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #f3f4f6;
+}
+
+.three-stars {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+}
+
+.star-player {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    flex: 1;
+    min-width: 200px;
+}
+
+.star-number {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #fbbf24;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.star-photo {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e5e7eb;
+}
+
+.star-name {
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.star-team {
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+.period-header {
+    font-weight: 700;
+    color: #4b5563;
+    margin-top: 16px;
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    background: #f3f4f6;
+    border-radius: 6px;
+}
+
+.goal-item, .penalty-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-left: 4px solid #d1d5db;
+    background: #f9fafb;
+    margin-bottom: 8px;
+    border-radius: 4px;
+}
+
+.goal-item.home-goal {
+    border-left-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.goal-item.away-goal {
+    border-left-color: #ef4444;
+    background: #fef2f2;
+}
+
+.penalty-item.home-penalty {
+    border-left-color: #3b82f6;
+}
+
+.penalty-item.away-penalty {
+    border-left-color: #ef4444;
+}
+
+.goal-time, .penalty-time {
+    font-weight: 700;
+    color: #1f2937;
+    min-width: 60px;
+}
+
+.goal-info, .penalty-info {
+    flex: 1;
+}
+
+.goal-scorer, .penalty-player {
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 4px;
+}
+
+.goal-assists, .penalty-desc {
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+.goal-score {
+    font-weight: 700;
+    color: #1f2937;
+    font-size: 1.125rem;
+}
+
+.highlight-link {
+    display: inline-block;
+    margin-left: 8px;
+    color: #3b82f6;
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: color 0.15s ease;
+}
+
+.highlight-link:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}

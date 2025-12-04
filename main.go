@@ -34,6 +34,7 @@ func main() {
 	router.HandleFunc("/standings", handleStandings).Methods("GET")
 	router.HandleFunc("/scores", handleScores).Methods("GET")
 	router.HandleFunc("/team/{teamId}", handleTeam).Methods("GET")
+	router.HandleFunc("/team-schedule/{teamId}", handleTeamSchedule).Methods("GET")
 	router.HandleFunc("/trivia", handleTrivia).Methods("GET")
 	router.HandleFunc("/coach", handleCoach).Methods("GET")
 	router.HandleFunc("/player/{playerId}", handlePlayer).Methods("GET")
@@ -42,6 +43,7 @@ func main() {
 	router.HandleFunc("/api/roster/{teamId}", handleAPIRoster).Methods("GET")
 	router.HandleFunc("/api/player/{playerId}", handleAPIPlayer).Methods("GET")
 	router.HandleFunc("/api/schedule/{date}", handleAPISchedule).Methods("GET")
+	router.HandleFunc("/api/team-schedule/{teamId}", handleAPITeamSchedule).Methods("GET")
 	router.HandleFunc("/api/gamecenter/{gameId}/landing", handleAPIGameLanding).Methods("GET")
 
 	port := "8080"
@@ -89,6 +91,10 @@ func handleCoach(w http.ResponseWriter, r *http.Request) {
 
 func handlePlayer(w http.ResponseWriter, r *http.Request) {
 	serveEmbeddedFile(w, r, "player.html")
+}
+
+func handleTeamSchedule(w http.ResponseWriter, r *http.Request) {
+	serveEmbeddedFile(w, r, "team-schedule.html")
 }
 
 func handleAPITeams(w http.ResponseWriter, r *http.Request) {
@@ -303,5 +309,57 @@ func handleAPIGameLanding(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(data); err != nil {
 		log.Printf("Error writing landing data: %v", err)
+	}
+}
+
+func handleAPITeamSchedule(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	teamId := vars["teamId"]
+
+	// Get team abbreviation from ID
+	teamDetails, err := GetTeamDetails(teamId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if len(teamDetails.Teams) == 0 {
+		http.Error(w, "Team not found", http.StatusNotFound)
+		return
+	}
+
+	teamAbbrev := teamDetails.Teams[0].Abbreviation
+
+	// Get season parameter from query string (optional)
+	season := r.URL.Query().Get("season")
+	var url string
+	if season != "" {
+		// Fetch specific season (e.g., "20232024")
+		url = fmt.Sprintf("%s/club-schedule-season/%s/%s", BaseURL, teamAbbrev, season)
+	} else {
+		// Fetch current season
+		url = fmt.Sprintf("%s/club-schedule-season/%s/now", BaseURL, teamAbbrev)
+	}
+
+	body, err := fetchURL(url)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer func() {
+		if err := body.Close(); err != nil {
+			log.Printf("Error closing response body: %v", err)
+		}
+	}()
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(data); err != nil {
+		log.Printf("Error writing team schedule data: %v", err)
 	}
 }
