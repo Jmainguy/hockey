@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fantasy Coach - NHL Fan Hub</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    primary: '#0d47a1',
+                    secondary: '#1565c0',
+                    accent: '#ffb300'
+                }
+            }
+        }
+    }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <header class="bg-gradient-to-r from-primary to-secondary text-white rounded-2xl p-6 shadow-lg mb-6 relative overflow-hidden">
+            <div class="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.2),transparent_60%)]"></div>
+            <div class="relative z-10 flex items-center justify-between">
+                <h1 class="text-3xl font-extrabold tracking-tight flex items-center gap-3"><span>🏒</span> Fantasy Coach</h1>
+                <div class="flex gap-2">
+                    <button id="backToTeam" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">← Back to Team</button>
+                    <a href="/" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">Home</a>
+                </div>
+            </div>
+        </header>
+
+        <div>
+            <div id="loading" class="text-center py-12 text-gray-500 text-lg">Loading roster...</div>
+            <div id="error" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4"></div>
+
+            <section id="coachSection" class="hidden">
+                <!-- Team Header -->
+                <div class="bg-white rounded-2xl shadow-md p-6 mb-6">
+                    <div class="flex items-center gap-4">
+                        <div id="teamLogoContainer" class="w-16 h-16"></div>
+                        <div>
+                            <h2 id="teamName" class="text-2xl font-bold text-gray-800"></h2>
+                            <p class="text-gray-600">Set your lines and strategies</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="bg-white rounded-2xl shadow-md mb-6">
+                    <div class="flex border-b border-gray-200 overflow-x-auto">
+                        <button class="tab-btn px-6 py-4 font-semibold whitespace-nowrap border-b-2 border-primary text-primary" data-tab="even-strength">Even Strength</button>
+                        <button class="tab-btn px-6 py-4 font-semibold whitespace-nowrap border-b-2 border-transparent text-gray-600 hover:text-gray-900" data-tab="powerplay">Power Play</button>
+                        <button class="tab-btn px-6 py-4 font-semibold whitespace-nowrap border-b-2 border-transparent text-gray-600 hover:text-gray-900" data-tab="penalty-kill">Penalty Kill</button>
+                        <button class="tab-btn px-6 py-4 font-semibold whitespace-nowrap border-b-2 border-transparent text-gray-600 hover:text-gray-900" data-tab="overtime">Overtime</button>
+                        <button class="tab-btn px-6 py-4 font-semibold whitespace-nowrap border-b-2 border-transparent text-gray-600 hover:text-gray-900" data-tab="goalies">Goalies</button>
+                    </div>
+                </div>
+
+                <!-- Tab Content -->
+                <div id="tab-even-strength" class="tab-content">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Forward Lines -->
+                        <div class="bg-white rounded-2xl shadow-md p-6">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                Forward Lines <span class="h-1 w-12 bg-accent rounded-full"></span>
+                            </h3>
+                            <div class="space-y-4">
+                                <div class="line-container" data-line="line1">
+                                    <div class="text-sm font-semibold text-gray-700 mb-2">Line 1</div>
+                                    <div class="grid grid-cols-3 gap-2">
+                                        <div class="player-slot" data-position="LW" data-line="1">
+                                            <div class="text-xs text-gray-500 mb-1">LW</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                        <div class="player-slot" data-position="C" data-line="1">
+                                            <div class="text-xs text-gray-500 mb-1">C</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                        <div class="player-slot" data-position="RW" data-line="1">
+                                            <div class="text-xs text-gray-500 mb-1">RW</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="line-container" data-line="line2">
+                                    <div class="text-sm font-semibold text-gray-700 mb-2">Line 2</div>
+                                    <div class="grid grid-cols-3 gap-2">
+                                        <div class="player-slot" data-position="LW" data-line="2">
+                                            <div class="text-xs text-gray-500 mb-1">LW</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                        <div class="player-slot" data-position="C" data-line="2">
+                                            <div class="text-xs text-gray-500 mb-1">C</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                        <div class="player-slot" data-position="RW" data-line="2">
+                                            <div class="text-xs text-gray-500 mb-1">RW</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="line-container" data-line="line3">
+                                    <div class="text-sm font-semibold text-gray-700 mb-2">Line 3</div>
+                                    <div class="grid grid-cols-3 gap-2">
+                                        <div class="player-slot" data-position="LW" data-line="3">
+                                            <div class="text-xs text-gray-500 mb-1">LW</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                        <div class="player-slot" data-position="C" data-line="3">
+                                            <div class="text-xs text-gray-500 mb-1">C</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                        <div class="player-slot" data-position="RW" data-line="3">
+                                            <div class="text-xs text-gray-500 mb-1">RW</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="line-container" data-line="line4">
+                                    <div class="text-sm font-semibold text-gray-700 mb-2">Line 4</div>
+                                    <div class="grid grid-cols-3 gap-2">
+                                        <div class="player-slot" data-position="LW" data-line="4">
+                                            <div class="text-xs text-gray-500 mb-1">LW</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                        <div class="player-slot" data-position="C" data-line="4">
+                                            <div class="text-xs text-gray-500 mb-1">C</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                        <div class="player-slot" data-position="RW" data-line="4">
+                                            <div class="text-xs text-gray-500 mb-1">RW</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Defense Pairs -->
+                        <div class="bg-white rounded-2xl shadow-md p-6">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                Defense Pairs <span class="h-1 w-12 bg-accent rounded-full"></span>
+                            </h3>
+                            <div class="space-y-4">
+                                <div class="line-container" data-line="dpair1">
+                                    <div class="text-sm font-semibold text-gray-700 mb-2">Pair 1</div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div class="player-slot" data-position="LD" data-line="d1">
+                                            <div class="text-xs text-gray-500 mb-1">LD</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                        <div class="player-slot" data-position="RD" data-line="d1">
+                                            <div class="text-xs text-gray-500 mb-1">RD</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="line-container" data-line="dpair2">
+                                    <div class="text-sm font-semibold text-gray-700 mb-2">Pair 2</div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div class="player-slot" data-position="LD" data-line="d2">
+                                            <div class="text-xs text-gray-500 mb-1">LD</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                        <div class="player-slot" data-position="RD" data-line="d2">
+                                            <div class="text-xs text-gray-500 mb-1">RD</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="line-container" data-line="dpair3">
+                                    <div class="text-sm font-semibold text-gray-700 mb-2">Pair 3</div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div class="player-slot" data-position="LD" data-line="d3">
+                                            <div class="text-xs text-gray-500 mb-1">LD</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                        <div class="player-slot" data-position="RD" data-line="d3">
+                                            <div class="text-xs text-gray-500 mb-1">RD</div>
+                                            <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Power Play Tab -->
+                <div id="tab-powerplay" class="tab-content hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-white rounded-2xl shadow-md p-6">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4">Power Play 1 (5v4)</h3>
+                            <div class="space-y-4">
+                                <div class="grid grid-cols-3 gap-2">
+                                    <div class="player-slot" data-position="F" data-line="pp1">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                    <div class="player-slot" data-position="F" data-line="pp1">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                    <div class="player-slot" data-position="F" data-line="pp1">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="player-slot" data-position="D" data-line="pp1">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                    <div class="player-slot" data-position="D" data-line="pp1">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl shadow-md p-6">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4">Power Play 2 (5v4)</h3>
+                            <div class="space-y-4">
+                                <div class="grid grid-cols-3 gap-2">
+                                    <div class="player-slot" data-position="F" data-line="pp2">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                    <div class="player-slot" data-position="F" data-line="pp2">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                    <div class="player-slot" data-position="F" data-line="pp2">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="player-slot" data-position="D" data-line="pp2">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                    <div class="player-slot" data-position="D" data-line="pp2">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Penalty Kill Tab -->
+                <div id="tab-penalty-kill" class="tab-content hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-white rounded-2xl shadow-md p-6">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4">Penalty Kill 1 (4v5)</h3>
+                            <div class="space-y-4">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="player-slot" data-position="F" data-line="pk1">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                    <div class="player-slot" data-position="F" data-line="pk1">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="player-slot" data-position="D" data-line="pk1">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                    <div class="player-slot" data-position="D" data-line="pk1">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl shadow-md p-6">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4">Penalty Kill 2 (4v5)</h3>
+                            <div class="space-y-4">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="player-slot" data-position="F" data-line="pk2">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                    <div class="player-slot" data-position="F" data-line="pk2">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="player-slot" data-position="D" data-line="pk2">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                    <div class="player-slot" data-position="D" data-line="pk2">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Overtime Tab -->
+                <div id="tab-overtime" class="tab-content hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-white rounded-2xl shadow-md p-6">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4">3v3 Overtime - Unit 1</h3>
+                            <div class="space-y-4">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="player-slot" data-position="F" data-line="ot1">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                    <div class="player-slot" data-position="F" data-line="ot1">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                </div>
+                                <div class="player-slot" data-position="D" data-line="ot1">
+                                    <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl shadow-md p-6">
+                            <h3 class="text-xl font-bold text-gray-800 mb-4">3v3 Overtime - Unit 2</h3>
+                            <div class="space-y-4">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="player-slot" data-position="F" data-line="ot2">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                    <div class="player-slot" data-position="F" data-line="ot2">
+                                        <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                    </div>
+                                </div>
+                                <div class="player-slot" data-position="D" data-line="ot2">
+                                    <div class="drop-zone min-h-[60px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Goalies Tab -->
+                <div id="tab-goalies" class="tab-content hidden">
+                    <div class="bg-white rounded-2xl shadow-md p-6 max-w-md mx-auto">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4">Goaltenders</h3>
+                        <div class="space-y-4">
+                            <div class="player-slot" data-position="G" data-line="starter">
+                                <div class="text-sm font-semibold text-gray-700 mb-2">Starting Goalie</div>
+                                <div class="drop-zone min-h-[80px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                            </div>
+                            <div class="player-slot" data-position="G" data-line="backup">
+                                <div class="text-sm font-semibold text-gray-700 mb-2">Backup Goalie</div>
+                                <div class="drop-zone min-h-[80px] border-2 border-dashed border-gray-300 rounded-lg p-2 text-center text-sm text-gray-400">Click to select</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex gap-4 justify-center mt-6">
+                    <button id="saveLineup" class="px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition">
+                        💾 Save Lineup
+                    </button>
+                    <button id="resetLineup" class="px-6 py-3 bg-gray-200 text-gray-700 font-bold rounded-xl shadow hover:shadow-lg transform hover:scale-105 transition">
+                        🔄 Reset
+                    </button>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="/static/coach.js"></script>
+</body>
+</html>

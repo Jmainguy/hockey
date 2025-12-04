@@ -54,15 +54,16 @@ type TeamDetails struct {
 
 // PlayerInfo represents a player on a roster
 type PlayerInfo struct {
-	ID           int          `json:"id"`
-	Name         string       `json:"name"`
-	Number       int          `json:"number"`
-	Position     string       `json:"position"`
-	FullPosition string       `json:"fullPosition"`
-	Photo        string       `json:"photo"`
-	ActionShot   string       `json:"actionShot,omitempty"`
-	BirthPlace   string       `json:"birthPlace,omitempty"`
-	Stats        *PlayerStats `json:"stats"`
+	ID            int          `json:"id"`
+	Name          string       `json:"name"`
+	Number        int          `json:"number"`
+	Position      string       `json:"position"`
+	FullPosition  string       `json:"fullPosition"`
+	Photo         string       `json:"photo"`
+	ActionShot    string       `json:"actionShot,omitempty"`
+	BirthPlace    string       `json:"birthPlace,omitempty"`
+	ShootsCatches string       `json:"shootsCatches,omitempty"` // "L" or "R"
+	Stats         *PlayerStats `json:"stats"`
 }
 
 // PlayerStats represents player statistics

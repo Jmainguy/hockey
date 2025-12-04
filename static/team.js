@@ -339,3 +339,10 @@ document.getElementById('triviaBtn')?.addEventListener('click', function() {
         window.location.href = `/trivia?team=${currentTeamId}`;
     }
 });
+
+// Coach button handler
+document.getElementById('coachBtn')?.addEventListener('click', function() {
+    if (currentTeamId) {
+        window.location.href = `/coach?team=${currentTeamId}`;
+    }
+});

@@ -453,9 +453,10 @@ func fetchPlayerData(playerID int, player *PlayerInfo) {
 	}
 
 	var playerResp struct {
-		Headshot  string `json:"headshot"`
-		HeroImage string `json:"heroImage"`
-		BirthCity struct {
+		Headshot      string `json:"headshot"`
+		HeroImage     string `json:"heroImage"`
+		ShootsCatches string `json:"shootsCatches"`
+		BirthCity     struct {
 			Default string `json:"default"`
 		} `json:"birthCity"`
 		BirthStateProvince struct {
@@ -488,6 +489,7 @@ func fetchPlayerData(playerID int, player *PlayerInfo) {
 	// Set photo
 	player.Photo = playerResp.Headshot
 	player.ActionShot = playerResp.HeroImage
+	player.ShootsCatches = playerResp.ShootsCatches
 
 	// Set birth place
 	birthParts := []string{}

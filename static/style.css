@@ -842,3 +842,20 @@ body.action-bg { background-size:cover; background-position:center; background-a
         width: 100%;
     }
 }
+
+/* Coach page - player side indicators */
+.natural-side {
+    border-color: #22c55e !important; /* green border for natural side */
+    background: linear-gradient(to right, rgba(34, 197, 94, 0.05), white) !important;
+}
+
+.off-wing {
+    border-color: #f59e0b !important; /* amber border for off-wing */
+    background: linear-gradient(to right, rgba(245, 158, 11, 0.05), white) !important;
+}
+
+.off-side-d {
+    border-color: #ef4444 !important; /* red border for off-side defense */
+    background: linear-gradient(to right, rgba(239, 68, 68, 0.05), white) !important;
+}
+
