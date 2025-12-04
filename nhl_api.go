@@ -465,17 +465,17 @@ func fetchPlayerData(playerID int, player *PlayerInfo) {
 		FeaturedStats struct {
 			RegularSeason struct {
 				SubSeason struct {
-					Games     int     `json:"gamesPlayed"`
-					Goals     int     `json:"goals"`
-					Assists   int     `json:"assists"`
-					Points    int     `json:"points"`
-					PlusMinus int     `json:"plusMinus"`
-					PIM       int     `json:"pim"`
-					Shots     int     `json:"shots"`
-					SavePctg  float64 `json:"savePercentage"`
-					GAA       float64 `json:"gaa"`
-					Wins      int     `json:"wins"`
-					Losses    int     `json:"losses"`
+					Games           int     `json:"gamesPlayed"`
+					Goals           int     `json:"goals"`
+					Assists         int     `json:"assists"`
+					Points          int     `json:"points"`
+					PlusMinus       int     `json:"plusMinus"`
+					PIM             int     `json:"pim"`
+					Shots           int     `json:"shots"`
+					SavePctg        float64 `json:"savePctg"`
+					GoalsAgainstAvg float64 `json:"goalsAgainstAvg"`
+					Wins            int     `json:"wins"`
+					Losses          int     `json:"losses"`
 				} `json:"subSeason"`
 			} `json:"regularSeason"`
 		} `json:"featuredStats"`
@@ -513,7 +513,7 @@ func fetchPlayerData(playerID int, player *PlayerInfo) {
 			Games:          subSeason.Games,
 			Wins:           subSeason.Wins,
 			Losses:         subSeason.Losses,
-			GAA:            subSeason.GAA,
+			GAA:            subSeason.GoalsAgainstAvg,
 			SavePercentage: subSeason.SavePctg,
 		}
 	} else {

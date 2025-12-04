@@ -189,8 +189,8 @@ function createPlayerCard(player) {
             <div class="stat"><span class="label">GP</span><span class="value">${stats.games || 0}</span></div>
             <div class="stat"><span class="label">W</span><span class="value">${stats.wins || 0}</span></div>
             <div class="stat"><span class="label">L</span><span class="value">${stats.losses || 0}</span></div>
-            <div class="stat"><span class="label">GAA</span><span class="value">${stats.gaa || '-'}</span></div>
-            <div class="stat"><span class="label">SV%</span><span class="value">${stats.savePercentage || '-'}</span></div>
+            <div class="stat"><span class="label">GAA</span><span class="value">${stats.gaa !== undefined ? stats.gaa.toFixed(2) : '-'}</span></div>
+            <div class="stat"><span class="label">SV%</span><span class="value">${stats.savePercentage !== undefined ? stats.savePercentage.toFixed(3) : '-'}</span></div>
         `;
     } else {
         statHtml = `
