@@ -1212,50 +1212,66 @@ body.action-bg { background-size:cover; background-position:center; background-a
 /* Mobile optimizations for team schedule calendar */
 @media (max-width: 640px) {
     .calendar-day-cell {
-        min-height: 100px;
+        min-height: 140px;
         padding: 4px;
     }
 
     .day-number {
         font-size: 0.75rem;
-        margin-bottom: 2px;
+        margin-bottom: 4px;
+        font-weight: 800;
     }
 
-    .team-logo-calendar {
-        width: 32px;
-        height: 32px;
-    }
-
-    .team-abbrev {
-        font-size: 0.6rem;
+    /* Stack game logos vertically on mobile */
+    .game-logos {
+        flex-direction: column;
+        gap: 6px;
+        width: 100%;
     }
 
     .vs-text {
-        font-size: 0.65rem;
-    }
-
-    .game-result-text {
         font-size: 0.7rem;
-    }
-
-    .game-score-display {
-        font-size: 0.75rem;
-    }
-
-    .game-time-result {
-        font-size: 0.65rem;
-    }
-
-    .game-logos {
-        gap: 4px;
+        font-weight: 700;
+        order: 2; /* Place VS between the teams */
     }
 
     .team-logo-container {
-        gap: 2px;
+        gap: 4px;
+        width: 100%;
+    }
+
+    /* Make logos bigger on mobile for better visibility */
+    .team-logo-calendar {
+        width: 56px;
+        height: 56px;
+    }
+
+    .team-abbrev {
+        font-size: 0.7rem;
+        font-weight: 700;
+    }
+
+    .game-result-text {
+        font-size: 0.8rem;
+        font-weight: 800;
+        margin-top: 2px;
+    }
+
+    .game-score-display {
+        font-size: 0.85rem;
+        font-weight: 700;
+        margin-top: 2px;
+    }
+
+    .game-time-result {
+        font-size: 0.7rem;
+        font-weight: 600;
+        margin-top: 2px;
     }
 
     .game-item-calendar {
-        gap: 4px;
+        gap: 6px;
+        padding: 6px 4px;
     }
 
     /* Reduce calendar section padding */
@@ -1310,38 +1326,49 @@ body.action-bg { background-size:cover; background-position:center; background-a
 /* Extra small mobile devices */
 @media (max-width: 400px) {
     .calendar-day-cell {
-        min-height: 85px;
-        padding: 2px;
+        min-height: 130px;
+        padding: 3px;
     }
 
     .day-number {
-        font-size: 0.65rem;
-        margin-bottom: 1px;
+        font-size: 0.7rem;
+        margin-bottom: 3px;
+        font-weight: 800;
     }
 
+    /* Keep logos reasonably sized even on very small screens */
     .team-logo-calendar {
-        width: 24px;
-        height: 24px;
+        width: 48px;
+        height: 48px;
     }
 
     .team-abbrev {
-        font-size: 0.5rem;
+        font-size: 0.65rem;
+        font-weight: 700;
     }
 
     .vs-text {
-        font-size: 0.55rem;
+        font-size: 0.65rem;
+        font-weight: 700;
     }
 
     .game-result-text {
-        font-size: 0.6rem;
+        font-size: 0.75rem;
+        font-weight: 800;
     }
 
     .game-score-display {
-        font-size: 0.65rem;
+        font-size: 0.8rem;
+        font-weight: 700;
     }
 
     .game-time-result {
-        font-size: 0.55rem;
+        font-size: 0.65rem;
+        font-weight: 600;
+    }
+
+    .game-logos {
+        gap: 4px;
     }
 
     /* Further reduce gaps and padding */
