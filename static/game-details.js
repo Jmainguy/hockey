@@ -16,7 +16,10 @@ function displayGameDetailsHTML(data) {
                 <div class="text-sm text-gray-600 mt-1">${isFutureGame ? (homeTeam.record || 'Record TBD') : 'SOG: ' + (homeTeam.sog || 0)}</div>
             </div>
             <div class="text-center">
-                <div class="text-5xl font-bold text-gray-800">${homeTeam.score || 0} - ${awayTeam.score || 0}</div>
+                ${isFutureGame ? 
+                    `<div class="text-5xl font-bold text-gray-800">VS</div>` :
+                    `<div class="text-5xl font-bold text-gray-800">${homeTeam.score || 0} - ${awayTeam.score || 0}</div>`
+                }
                 <div class="text-sm text-gray-600 mt-2">${data.gameState === 'FUT' ? 'Scheduled' : data.gameState === 'LIVE' ? 'Live' : 'Final'}</div>
                 ${data.periodDescriptor ? `<div class="text-xs text-gray-500 mt-1">${data.periodDescriptor.periodType} - Period ${data.periodDescriptor.number}</div>` : ''}
             </div>

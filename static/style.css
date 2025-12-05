@@ -1257,42 +1257,206 @@ body.action-bg { background-size:cover; background-position:center; background-a
     .game-item-calendar {
         gap: 4px;
     }
+
+    /* Reduce calendar section padding */
+    #calendarSection {
+        padding: 1rem !important;
+    }
+
+    /* Reduce gap between calendar cells */
+    #calendarGrid {
+        gap: 0.25rem !important;
+    }
+
+    /* Make day headers smaller */
+    #calendarSection .grid.grid-cols-7 > div:not(#calendarGrid) {
+        font-size: 0.65rem;
+        padding: 0.25rem 0;
+    }
+
+    /* Reduce month record stats grid */
+    #monthRecord {
+        padding: 1rem !important;
+    }
+
+    #monthRecord h3 {
+        font-size: 1.125rem;
+        margin-bottom: 0.75rem;
+    }
+
+    #monthRecord .grid > div {
+        padding: 0.5rem !important;
+    }
+
+    #monthRecord .text-3xl {
+        font-size: 1.5rem !important;
+    }
+
+    /* Calendar controls */
+    #calendarControls {
+        padding: 1rem !important;
+    }
+
+    #calendarControls h2 {
+        font-size: 1.25rem;
+    }
+
+    #calendarControls button {
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.75rem !important;
+    }
 }
 
 /* Extra small mobile devices */
 @media (max-width: 400px) {
     .calendar-day-cell {
-        min-height: 90px;
-        padding: 3px;
+        min-height: 85px;
+        padding: 2px;
     }
 
     .day-number {
-        font-size: 0.7rem;
+        font-size: 0.65rem;
         margin-bottom: 1px;
     }
 
     .team-logo-calendar {
-        width: 28px;
-        height: 28px;
+        width: 24px;
+        height: 24px;
     }
 
     .team-abbrev {
-        font-size: 0.55rem;
+        font-size: 0.5rem;
     }
 
     .vs-text {
-        font-size: 0.6rem;
+        font-size: 0.55rem;
     }
 
     .game-result-text {
-        font-size: 0.65rem;
+        font-size: 0.6rem;
     }
 
     .game-score-display {
-        font-size: 0.7rem;
+        font-size: 0.65rem;
     }
 
     .game-time-result {
+        font-size: 0.55rem;
+    }
+
+    /* Further reduce gaps and padding */
+    #calendarGrid {
+        gap: 0.125rem !important;
+    }
+
+    #calendarSection {
+        padding: 0.5rem !important;
+    }
+
+    #calendarSection .grid.grid-cols-7 > div:not(#calendarGrid) {
         font-size: 0.6rem;
+        padding: 0.125rem 0;
+    }
+
+    /* Ultra compact month record */
+    #monthRecord .grid > div {
+        padding: 0.375rem !important;
+    }
+
+    #monthRecord .text-3xl {
+        font-size: 1.25rem !important;
+    }
+
+    #monthRecord .text-xs {
+        font-size: 0.625rem !important;
+    }
+}
+
+/* Mobile header navigation fixes */
+@media (max-width: 768px) {
+    /* Make header navigation responsive */
+    header .flex.gap-2 {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: flex-end;
+    }
+
+    header .flex.gap-2 > a,
+    header .flex.gap-2 > button {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+        white-space: nowrap;
+    }
+
+    /* Stack header content vertically on very small screens */
+    header .flex.items-center.justify-between {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch !important;
+    }
+
+    header h1 {
+        font-size: 1.875rem !important;
+    }
+
+    header p {
+        font-size: 1rem !important;
+    }
+
+    /* Ensure navigation buttons are visible and scrollable if needed */
+    header .flex.gap-2 {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 0.25rem;
+    }
+
+    header .flex.gap-2::-webkit-scrollbar {
+        height: 4px;
+    }
+
+    header .flex.gap-2::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 2px;
+    }
+
+    /* Calendar improvements for tablets */
+    .calendar-day-cell {
+        min-height: 110px;
+    }
+
+    .team-logo-calendar {
+        width: 40px;
+        height: 40px;
+    }
+
+    /* Make month record stats stack better */
+    #monthRecord .grid {
+        gap: 0.75rem;
+    }
+
+    /* Calendar header days */
+    #calendarSection .grid.grid-cols-7 > div {
+        font-size: 0.75rem;
+        padding: 0.25rem;
+    }
+}
+
+@media (max-width: 480px) {
+    header h1 {
+        font-size: 1.5rem !important;
+    }
+
+    header .flex.gap-2 > a,
+    header .flex.gap-2 > button {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.75rem;
+    }
+
+    /* Make buttons smaller and allow horizontal scroll */
+    header .flex.gap-2 {
+        gap: 0.375rem;
+        justify-content: flex-start;
     }
 }
