@@ -78,27 +78,46 @@
                 </div>
             </section>
 
-            <section id="rosterSection" class="roster-section hidden bg-white rounded-2xl shadow-md p-6">
-                <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">Team Roster <span class="h-1 w-16 bg-accent rounded-full"></span></h2>
-                <div class="flex flex-wrap gap-3 mb-4">
-                    <input type="text" id="rosterSearch" placeholder="Search player..." aria-label="Search players by name" class="flex-1 min-w-[200px] px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
-                    <select id="rosterSort" aria-label="Sort players" class="px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
-                        <option value="POINTS">Sort: Points</option>
-                        <option value="GOALS">Goals</option>
-                        <option value="ASSISTS">Assists</option>
-                        <option value="GAMES">Games Played</option>
-                        <option value="SAVE%">Save % (Goalies)</option>
-                        <option value="GAA">GAA (Goalies)</option>
-                    </select>
+            <!-- Tabs for Roster and Prospects -->
+            <div class="bg-white rounded-2xl shadow-md p-6 hidden" id="rosterProspectsSection">
+                <div class="flex gap-4 border-b border-gray-200 mb-6">
+                    <button id="rosterTab" class="tab-btn px-6 py-3 font-bold text-lg border-b-4 border-primary text-primary transition">
+                        Team Roster
+                    </button>
+                    <button id="prospectsTab" class="tab-btn px-6 py-3 font-bold text-lg border-b-4 border-transparent text-gray-500 hover:text-gray-700 transition">
+                        Prospects
+                    </button>
                 </div>
-                <div class="roster-filters flex flex-wrap gap-2 mb-6">
-                    <button class="filter-btn px-4 py-2 rounded-lg border-2 font-semibold transition hover:border-accent active" data-position="ALL">All Positions</button>
-                    <button class="filter-btn px-4 py-2 rounded-lg border-2 font-semibold transition hover:border-accent" data-position="F">Forwards</button>
-                    <button class="filter-btn px-4 py-2 rounded-lg border-2 font-semibold transition hover:border-accent" data-position="D">Defensemen</button>
-                    <button class="filter-btn px-4 py-2 rounded-lg border-2 font-semibold transition hover:border-accent" data-position="G">Goalies</button>
+
+                <!-- Roster Section -->
+                <div id="rosterContent" class="tab-content">
+                    <div class="flex flex-wrap gap-3 mb-4">
+                        <input type="text" id="rosterSearch" placeholder="Search player..." aria-label="Search players by name" class="flex-1 min-w-[200px] px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <select id="rosterSort" aria-label="Sort players" class="px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="POINTS">Sort: Points</option>
+                            <option value="GOALS">Goals</option>
+                            <option value="ASSISTS">Assists</option>
+                            <option value="GAMES">Games Played</option>
+                            <option value="SAVE%">Save % (Goalies)</option>
+                            <option value="GAA">GAA (Goalies)</option>
+                        </select>
+                    </div>
+                    <div class="roster-filters flex flex-wrap gap-2 mb-6">
+                        <button class="filter-btn px-4 py-2 rounded-lg border-2 font-semibold transition hover:border-accent active" data-position="ALL">All Positions</button>
+                        <button class="filter-btn px-4 py-2 rounded-lg border-2 font-semibold transition hover:border-accent" data-position="F">Forwards</button>
+                        <button class="filter-btn px-4 py-2 rounded-lg border-2 font-semibold transition hover:border-accent" data-position="D">Defensemen</button>
+                        <button class="filter-btn px-4 py-2 rounded-lg border-2 font-semibold transition hover:border-accent" data-position="G">Goalies</button>
+                    </div>
+                    <div class="roster-grid roster-section" id="rosterBody"></div>
                 </div>
-                <div class="roster-grid" id="rosterBody"></div>
-            </section>
+
+                <!-- Prospects Section -->
+                <div id="prospectsContent" class="tab-content hidden">
+                    <div id="prospectsLoading" class="text-center py-8 text-gray-500">Loading prospects...</div>
+                    <div id="prospectsError" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4"></div>
+                    <div class="roster-grid roster-section" id="prospectsBody"></div>
+                </div>
+            </div>
             
             <!-- Player Modal -->
             <div id="playerModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">

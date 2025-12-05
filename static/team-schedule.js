@@ -268,7 +268,7 @@ function createDayCell(day) {
             const isHome = game.homeTeam.abbrev === currentTeamAbbrev;
             const homeAbbrev = game.homeTeam.abbrev;
             const awayAbbrev = game.awayTeam.abbrev;
-            const gameTime = formatGameTime(game.gameDate);
+            const gameTime = formatGameTime(game.startTimeUTC || game.gameDate);
             const gameStatus = getGameStatus(game);
             
             // Build logo display
@@ -307,7 +307,7 @@ function createDayCell(day) {
                     
                     resultHtml = `
                         <div class="game-result-text">${resultText}</div>
-                        <div class="game-score-display">${game.awayTeam.score} - ${game.homeTeam.score}</div>
+                        <div class="game-score-display">${game.homeTeam.score} - ${game.awayTeam.score}</div>
                     `;
                 } else {
                     resultHtml = `<div class="game-time-result">${gameStatus.text}</div>`;
@@ -346,12 +346,12 @@ function getOpponent(game) {
 }
 
 function formatGameTime(dateStr) {
+    if (!dateStr) return 'TBD';
     const date = new Date(dateStr);
-    const hours = date.getHours();
-    const minutes = date.getMinutes();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const displayHours = hours % 12 || 12;
-    return `${displayHours}:${String(minutes).padStart(2, '0')} ${ampm}`;
+    return date.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit'
+    });
 }
 
 function getGameStatus(game) {

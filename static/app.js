@@ -58,8 +58,13 @@ async function loadTeams() {
                     divisionHeader.innerHTML = `<h3 class="text-2xl font-bold tracking-tight flex items-center gap-3"><span class="text-accent">▶</span>${divisionName}</h3>`;
                     teamsGrid.appendChild(divisionHeader);
                     
-                    // Sort teams by points (descending) within division
-                    divisions[divisionName].sort((a, b) => b.record.points - a.record.points);
+                    // Sort teams by standings (points descending, then wins as tiebreaker)
+                    divisions[divisionName].sort((a, b) => {
+                        if (b.record.points !== a.record.points) {
+                            return b.record.points - a.record.points;
+                        }
+                        return b.record.wins - a.record.wins;
+                    });
                     
                     // Create team cards for this division
                     divisions[divisionName].forEach(team => {

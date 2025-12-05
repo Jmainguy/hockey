@@ -1208,3 +1208,91 @@ body.action-bg { background-size:cover; background-position:center; background-a
     0%, 100% { opacity: 1; }
     50% { opacity: 0.8; }
 }
+
+/* Mobile optimizations for team schedule calendar */
+@media (max-width: 640px) {
+    .calendar-day-cell {
+        min-height: 100px;
+        padding: 4px;
+    }
+
+    .day-number {
+        font-size: 0.75rem;
+        margin-bottom: 2px;
+    }
+
+    .team-logo-calendar {
+        width: 32px;
+        height: 32px;
+    }
+
+    .team-abbrev {
+        font-size: 0.6rem;
+    }
+
+    .vs-text {
+        font-size: 0.65rem;
+    }
+
+    .game-result-text {
+        font-size: 0.7rem;
+    }
+
+    .game-score-display {
+        font-size: 0.75rem;
+    }
+
+    .game-time-result {
+        font-size: 0.65rem;
+    }
+
+    .game-logos {
+        gap: 4px;
+    }
+
+    .team-logo-container {
+        gap: 2px;
+    }
+
+    .game-item-calendar {
+        gap: 4px;
+    }
+}
+
+/* Extra small mobile devices */
+@media (max-width: 400px) {
+    .calendar-day-cell {
+        min-height: 90px;
+        padding: 3px;
+    }
+
+    .day-number {
+        font-size: 0.7rem;
+        margin-bottom: 1px;
+    }
+
+    .team-logo-calendar {
+        width: 28px;
+        height: 28px;
+    }
+
+    .team-abbrev {
+        font-size: 0.55rem;
+    }
+
+    .vs-text {
+        font-size: 0.6rem;
+    }
+
+    .game-result-text {
+        font-size: 0.65rem;
+    }
+
+    .game-score-display {
+        font-size: 0.7rem;
+    }
+
+    .game-time-result {
+        font-size: 0.6rem;
+    }
+}

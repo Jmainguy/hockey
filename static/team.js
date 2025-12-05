@@ -1,8 +1,16 @@
 // NHL Fan Hub - Team Details
 let currentTeamId = null;
+let currentTeamAbbrev = null;
 let allPlayers = [];
+let allProspects = [];
+let prospectsCache = {}; // Cache prospect details by team
 let rosterSortKey = 'POINTS';
 let rosterSearchTerm = '';
+
+// Helper function to add delay between requests
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     // Get team ID from URL query parameter
@@ -21,6 +29,10 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         showError('No team selected. Please go back and select a team.');
     }
+    
+    // Setup tab buttons
+        document.getElementById('rosterTab')?.addEventListener('click', () => switchTab('roster'));
+    document.getElementById('prospectsTab')?.addEventListener('click', () => switchTab('prospects'));
     
     // Setup filter buttons
     const filterBtns = document.querySelectorAll('.filter-btn');
@@ -61,6 +73,8 @@ async function loadTeamDetails() {
         
         if (data.teams && data.teams.length > 0) {
             const team = data.teams[0];
+            // Load standings to get division/conference ranks
+            await loadStandingsForRanks(team);
             displayTeamDetails(team);
         } else {
             showError('Team not found');
@@ -71,15 +85,73 @@ async function loadTeamDetails() {
     }
 }
 
+async function loadStandingsForRanks(team) {
+    try {
+        const response = await fetch('/api/teams');
+        if (!response.ok) return;
+        
+        const data = await response.json();
+        if (!data.teams || data.teams.length === 0) return;
+        
+        // Calculate division rank
+        const divisionTeams = data.teams
+            .filter(t => t.division === team.division.name)
+            .sort((a, b) => {
+                if (b.record.points !== a.record.points) {
+                    return b.record.points - a.record.points;
+                }
+                return b.record.wins - a.record.wins;
+            });
+        
+        const divisionRank = divisionTeams.findIndex(t => t.id === team.id) + 1;
+        
+        // Calculate conference rank
+        const conferenceTeams = data.teams
+            .filter(t => t.conference === team.conference.name)
+            .sort((a, b) => {
+                if (b.record.points !== a.record.points) {
+                    return b.record.points - a.record.points;
+                }
+                return b.record.wins - a.record.wins;
+            });
+        
+        const conferenceRank = conferenceTeams.findIndex(t => t.id === team.id) + 1;
+        
+        // Store ranks on team object
+        team.divisionRank = divisionRank;
+        team.conferenceRank = conferenceRank;
+        team.divisionTotal = divisionTeams.length;
+        team.conferenceTotal = conferenceTeams.length;
+        
+    } catch (error) {
+        console.error('Error loading standings for ranks:', error);
+    }
+}
+
 function displayTeamDetails(team) {
     const teamHeader = document.getElementById('teamHeader');
     const teamRecordSection = document.getElementById('teamRecordSection');
     const loading = document.getElementById('loading');
     
+    // Store team abbreviation for prospects
+    currentTeamAbbrev = team.abbreviation;
+    
     // Use the full team name from API (e.g., "Buffalo Sabres")
     document.getElementById('teamName').textContent = team.name;
-    document.getElementById('teamDivision').textContent = `${team.division.name}`;
-    document.getElementById('teamConference').textContent = `${team.conference.name}`;
+    
+    // Display division with rank
+    const divisionRankText = team.divisionRank === 1 ? 'Leader' : 
+                            team.divisionRank === 2 ? '2nd' :
+                            team.divisionRank === 3 ? '3rd' :
+                            `${team.divisionRank}th`;
+    document.getElementById('teamDivision').textContent = `${team.division.name} - ${divisionRankText}`;
+    
+    // Display conference with rank
+    const conferenceRankText = team.conferenceRank === 1 ? 'Leader' : 
+                              team.conferenceRank === 2 ? '2nd' :
+                              team.conferenceRank === 3 ? '3rd' :
+                              `${team.conferenceRank}th`;
+    document.getElementById('teamConference').textContent = `${team.conference.name} - ${conferenceRankText}`;
 
     // Inject team logo if abbreviation available
     const logoContainer = document.getElementById('teamLogoContainer');
@@ -113,6 +185,205 @@ function displayTeamDetails(team) {
     loading.classList.add('hidden');
 }
 
+function switchTab(tab) {
+    const rosterTab = document.getElementById('rosterTab');
+    const prospectsTab = document.getElementById('prospectsTab');
+    const rosterContent = document.getElementById('rosterContent');
+    const prospectsContent = document.getElementById('prospectsContent');
+    
+    if (tab === 'roster') {
+        rosterTab.classList.add('border-primary', 'text-primary');
+        rosterTab.classList.remove('border-transparent', 'text-gray-500');
+        prospectsTab.classList.add('border-transparent', 'text-gray-500');
+        prospectsTab.classList.remove('border-primary', 'text-primary');
+        rosterContent.classList.remove('hidden');
+        prospectsContent.classList.add('hidden');
+    } else {
+        prospectsTab.classList.add('border-primary', 'text-primary');
+        prospectsTab.classList.remove('border-transparent', 'text-gray-500');
+        rosterTab.classList.add('border-transparent', 'text-gray-500');
+        rosterTab.classList.remove('border-primary', 'text-primary');
+        prospectsContent.classList.remove('hidden');
+        rosterContent.classList.add('hidden');
+        
+        // Load prospects if not already loaded
+        if (allProspects.length === 0 && currentTeamAbbrev) {
+            loadProspects();
+        }
+    }
+}
+
+async function loadProspects() {
+    const prospectsLoading = document.getElementById('prospectsLoading');
+    const prospectsError = document.getElementById('prospectsError');
+    const prospectsBody = document.getElementById('prospectsBody');
+    
+    try {
+        prospectsLoading.classList.remove('hidden');
+        prospectsError.classList.add('hidden');
+        
+        // Check cache first
+        if (prospectsCache[currentTeamAbbrev]) {
+            allProspects = prospectsCache[currentTeamAbbrev];
+            displayProspects(allProspects);
+            prospectsLoading.classList.add('hidden');
+            return;
+        }
+        
+        const response = await fetch(`/api/prospects/${currentTeamAbbrev}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        
+        // Combine all prospects
+        const prospects = [
+            ...(data.forwards || []),
+            ...(data.defensemen || []),
+            ...(data.goalies || [])
+        ];
+        
+        // Display basic prospect info immediately
+        allProspects = prospects.map(p => ({ ...p, overallPick: 999999 }));
+        displayProspects(allProspects);
+        prospectsLoading.textContent = 'Loading draft details...';
+        
+        // Fetch detailed information in batches with delays to avoid rate limiting
+        const batchSize = 5;
+        const delayMs = 200; // 200ms delay between batches
+        
+        for (let i = 0; i < prospects.length; i += batchSize) {
+            const batch = prospects.slice(i, i + batchSize);
+            
+            const batchResults = await Promise.all(
+                batch.map(async (prospect, idx) => {
+                    try {
+                        // Add small delay for each request in batch
+                        if (idx > 0) await delay(50);
+                        
+                        const detailResponse = await fetch(`/api/player/${prospect.id}`);
+                        if (detailResponse.ok) {
+                            const detailData = await detailResponse.json();
+                            return {
+                                ...prospect,
+                                draftDetails: detailData.draftDetails,
+                                overallPick: detailData.draftDetails?.overallPick || 999999
+                            };
+                        }
+                    } catch (err) {
+                        console.error(`Error fetching details for prospect ${prospect.id}:`, err);
+                    }
+                    return { ...prospect, overallPick: 999999 };
+                })
+            );
+            
+            // Update allProspects with this batch
+            batchResults.forEach((detailedProspect, idx) => {
+                const originalIdx = i + idx;
+                if (originalIdx < allProspects.length) {
+                    allProspects[originalIdx] = detailedProspect;
+                }
+            });
+            
+            // Sort and re-display after each batch
+            allProspects.sort((a, b) => a.overallPick - b.overallPick);
+            displayProspects(allProspects);
+            
+            // Delay before next batch
+            if (i + batchSize < prospects.length) {
+                await delay(delayMs);
+            }
+        }
+        
+        // Cache the results
+        prospectsCache[currentTeamAbbrev] = allProspects;
+        
+        prospectsLoading.classList.add('hidden');
+    } catch (error) {
+        console.error('Error loading prospects:', error);
+        prospectsLoading.classList.add('hidden');
+        prospectsError.textContent = `Error loading prospects: ${error.message}`;
+        prospectsError.classList.remove('hidden');
+    }
+}
+
+function displayProspects(prospects) {
+    const prospectsBody = document.getElementById('prospectsBody');
+    prospectsBody.innerHTML = '';
+    
+    if (prospects && prospects.length > 0) {
+        prospects.forEach(prospect => {
+            const card = createProspectCard(prospect);
+            card.addEventListener('click', function() {
+                window.location.href = `/player/${prospect.id}`;
+            });
+            prospectsBody.appendChild(card);
+        });
+    } else {
+        prospectsBody.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500">No prospects found</div>';
+    }
+}
+
+function createProspectCard(prospect) {
+    const card = document.createElement('div');
+    
+    // Fix position display: R -> RW, L -> LW
+    let displayPosition = prospect.positionCode || 'F';
+    if (displayPosition === 'R') displayPosition = 'RW';
+    else if (displayPosition === 'L') displayPosition = 'LW';
+    
+    card.className = 'player-card roster-card position-' + displayPosition;
+    
+    const heightFt = prospect.heightInInches ? Math.floor(prospect.heightInInches / 12) : 0;
+    const heightIn = prospect.heightInInches ? prospect.heightInInches % 12 : 0;
+    
+    const name = `${prospect.firstName?.default || ''} ${prospect.lastName?.default || ''}`.trim();
+    const birthDate = prospect.birthDate ? new Date(prospect.birthDate) : null;
+    const age = birthDate ? Math.floor((new Date() - birthDate) / (365.25 * 24 * 60 * 60 * 1000)) : '-';
+    const overallPick = prospect.overallPick && prospect.overallPick < 999999 ? prospect.overallPick : null;
+    
+    card.innerHTML = `
+        <div class="player-photo">
+            <img src="${prospect.headshot || '/static/default-player.png'}" alt="${name}">
+        </div>
+        <div class="player-info">
+            <div class="player-top">
+                <span class="player-number">#${prospect.sweaterNumber || '-'}</span>
+                <span class="player-name">${name}</span>
+                <span class="player-pos">${displayPosition}</span>
+            </div>
+            <div class="player-stats">
+                ${overallPick ? `<div class="stat">
+                    <span class="label">Pick</span>
+                    <span class="value">#${overallPick}</span>
+                </div>` : ''}
+                <div class="stat">
+                    <span class="label">Age</span>
+                    <span class="value">${age}</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Ht</span>
+                    <span class="value">${heightFt}'${heightIn}"</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Wt</span>
+                    <span class="value">${prospect.weightInPounds || '-'}</span>
+                </div>
+                <div class="stat">
+                    <span class="label">Shoots</span>
+                    <span class="value">${prospect.shootsCatches || '-'}</span>
+                </div>
+                <div class="stat">
+                    <span class="label">From</span>
+                    <span class="value">${prospect.birthCity?.default || '-'}, ${prospect.birthCountry || ''}</span>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    return card;
+}
+
 async function loadRoster() {
     try {
         const response = await fetch(`/api/roster/${currentTeamId}`);
@@ -133,7 +404,7 @@ async function loadRoster() {
 
 function displayRoster(players) {
     const rosterBody = document.getElementById('rosterBody');
-    const rosterSection = document.getElementById('rosterSection');
+    const rosterProspectsSection = document.getElementById('rosterProspectsSection');
 
     rosterBody.innerHTML = '';
 
@@ -146,10 +417,10 @@ function displayRoster(players) {
             });
             rosterBody.appendChild(card);
         });
-        rosterSection.classList.remove('hidden');
+        rosterProspectsSection.classList.remove('hidden');
     } else {
         rosterBody.innerHTML = '<div class="no-players">No players found</div>';
-        rosterSection.classList.remove('hidden');
+        rosterProspectsSection.classList.remove('hidden');
     }
 }
 

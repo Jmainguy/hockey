@@ -41,6 +41,7 @@ func main() {
 	router.HandleFunc("/api/teams", handleAPITeams).Methods("GET")
 	router.HandleFunc("/api/team/{teamId}", handleAPITeamDetails).Methods("GET")
 	router.HandleFunc("/api/roster/{teamId}", handleAPIRoster).Methods("GET")
+	router.HandleFunc("/api/prospects/{teamAbbrev}", handleAPIProspects).Methods("GET")
 	router.HandleFunc("/api/player/{playerId}", handleAPIPlayer).Methods("GET")
 	router.HandleFunc("/api/schedule/{date}", handleAPISchedule).Methods("GET")
 	router.HandleFunc("/api/team-schedule/{teamId}", handleAPITeamSchedule).Methods("GET")
@@ -147,6 +148,30 @@ func handleAPIRoster(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func handleAPIProspects(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	teamAbbrev := vars["teamAbbrev"]
+
+	// Construct NHL API URL
+	url := fmt.Sprintf("%s/prospects/%s", BaseURL, teamAbbrev)
+
+	body, err := fetchURL(url)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer func() {
+		if err := body.Close(); err != nil {
+			log.Printf("Error closing response body: %v", err)
+		}
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := io.Copy(w, body); err != nil {
+		log.Printf("Error copying prospects response: %v", err)
+	}
+}
+
 func handleAPIPlayer(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	playerId := vars["playerId"]
@@ -249,36 +274,6 @@ func handleAPISchedule(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(data); err != nil {
 		log.Printf("Error writing schedule data: %v", err)
-	}
-}
-
-func handleAPIGameBoxscore(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	gameId := vars["gameId"]
-
-	// Construct NHL API URL for game landing (more detailed than boxscore)
-	url := fmt.Sprintf("%s/gamecenter/%s/landing", BaseURL, gameId)
-
-	body, err := fetchURL(url)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	defer func() {
-		if err := body.Close(); err != nil {
-			log.Printf("Error closing response body: %v", err)
-		}
-	}()
-
-	data, err := io.ReadAll(body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if _, err := w.Write(data); err != nil {
-		log.Printf("Error writing landing data: %v", err)
 	}
 }
 
