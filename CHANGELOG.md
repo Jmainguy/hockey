@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/Jmainguy/hockey/compare/v1.2.0...v1.3.0) (2025-12-05)
+
+
+### Features
+
+* support prospects data, ticket links on games ([2f95098](https://github.com/Jmainguy/hockey/commit/2f95098124704ae4d75aa83c7d12ed044157a383))
+
 ## [1.2.0](https://github.com/Jmainguy/hockey/compare/v1.1.0...v1.2.0) (2025-12-04)
 
 
