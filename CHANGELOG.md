@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/Jmainguy/hockey/compare/v1.3.1...v1.3.2) (2025-12-05)
+
+
+### Bug Fixes
+
+* make mobile calander more visually appealing ([26f5c63](https://github.com/Jmainguy/hockey/commit/26f5c639146a721fe2f8bdf187be2217c2e57c76))
+
 ## [1.3.1](https://github.com/Jmainguy/hockey/compare/v1.3.0...v1.3.1) (2025-12-05)
 
 
