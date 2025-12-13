@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/Jmainguy/hockey/compare/v1.5.0...v1.5.1) (2025-12-13)
+
+
+### Bug Fixes
+
+* make mobile standings more clear ([3e53699](https://github.com/Jmainguy/hockey/commit/3e536991d8a7adabd0e3bb457b6b6aa5743cbb56))
+
 ## [1.5.0](https://github.com/Jmainguy/hockey/compare/v1.4.4...v1.5.0) (2025-12-13)
 
 
