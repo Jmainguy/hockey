@@ -67,7 +67,11 @@ function renderStandings() {
     const tbody = document.getElementById('standingsBody');
     tbody.innerHTML = '';
     const cardsRoot = document.getElementById('standingsCards');
-    if (cardsRoot) cardsRoot.innerHTML = '';
+    if (cardsRoot) {
+        // Compact single-column vertical list for mobile to show many teams
+        cardsRoot.className = 'sm:hidden px-2 py-2 space-y-1';
+        cardsRoot.innerHTML = '';
+    }
 
     // Filter teams based on current filter
     let filteredTeams = allTeams;
@@ -138,6 +142,7 @@ function renderStandings() {
     filteredTeams.forEach((t, i) => t._originalIndex = i + 1);
     filteredTeams.sort(compare);
 
+
     // Calculate games played and points percentage
     filteredTeams.forEach((team, index) => {
         const gp = team.record.wins + team.record.losses + team.record.overtimeLosses;
@@ -188,13 +193,15 @@ function renderStandings() {
             a.href = `/team/${(team.abbrev || '').toString().toLowerCase()}`;
             a.className = 'block';
             const card = document.createElement('div');
-            card.className = 'bg-white rounded-lg shadow mb-3 p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3';
+            // ultra-compact card for vertical list: minimal padding and gap
+            card.className = 'bg-white rounded shadow p-1 flex items-center gap-2';
             const left = document.createElement('div');
-            left.className = 'flex items-center gap-3 min-w-0';
-            const imgHtml = logoUrl ? `<img src="${logoUrl}" alt="${team.abbrev}" class="w-12 h-12 object-contain flex-shrink-0" onerror="this.style.display='none'">` : `<div class="w-12 h-12 bg-gray-100 flex items-center justify-center rounded">${(team.abbrev||'').substring(0,3).toUpperCase()}</div>`;
-            left.innerHTML = `${imgHtml}<div class="min-w-0"><div class="font-bold text-gray-900 truncate">${team.name}</div><div class="text-xs text-gray-500 truncate">${team.division}</div></div>`;
+            left.className = 'flex items-center gap-2 min-w-0';
+            // smaller logo to save vertical space; fallback shows 3-letter abbrev
+            const imgHtml = logoUrl ? `<img src="${logoUrl}" alt="${team.abbrev}" class="w-8 h-8 object-contain flex-shrink-0" onerror="this.style.display='none'">` : `<div class="w-8 h-8 bg-gray-100 flex items-center justify-center rounded text-xs">${(team.abbrev||'').substring(0,3).toUpperCase()}</div>`;
+            left.innerHTML = `${imgHtml}<div class="min-w-0"><div class="font-semibold text-sm text-gray-900 truncate">${team.name}</div><div class="text-[10px] text-gray-500 truncate">${team.division}</div></div>`;
             const right = document.createElement('div');
-            right.className = 'text-sm mt-2 sm:mt-0 sm:text-right';
+            right.className = 'text-[11px] ml-auto text-right space-y-0';
             const gf = team.goalsFor !== undefined && team.goalsFor !== null ? team.goalsFor : '-';
             const ga = team.goalsAgainst !== undefined && team.goalsAgainst !== null ? team.goalsAgainst : '-';
             const diffNum = (team.goalDiff !== undefined && team.goalDiff !== null) ? Number(team.goalDiff) : null;
@@ -211,23 +218,11 @@ function renderStandings() {
             const gaHtml = (ga !== '-') ? `<span class="font-semibold text-gray-900">${ga}</span>` : `<span class="text-gray-500">-</span>`;
             const diffHtml = (diffNum !== null) ? (diffNum >= 0 ? `<span class="text-green-600 font-semibold">+${diffNum}</span>` : `<span class="text-red-600 font-semibold">${diffNum}</span>`) : `<span class="text-gray-500">-</span>`;
 
+            // Condensed two-line layout for high density: top line summary, bottom line compact details
             right.innerHTML = `
-                <div class="text-gray-700 font-semibold">${team.record.points} pts</div>
-                <div class="mt-1 grid grid-cols-2 gap-2 text-sm">
-                    <div class="text-gray-500">GP <span class="font-medium text-gray-900">${gp}</span></div>
-                    <div class="text-gray-500">P% <span class="font-medium text-gray-900">${pointsPct}</span></div>
-                    <div class="text-gray-500">W <span class="">${wHtml}</span></div>
-                    <div class="text-gray-500">L <span class="">${lHtml}</span></div>
-                    <div class="text-gray-500">OTL <span class="">${oHtml}</span></div>
-                    <div class="text-gray-500">Win% <span class="font-medium text-gray-900">${winPctStr}</span></div>
-                </div>
-                <div class="mt-2 grid grid-cols-2 gap-2 text-sm text-gray-500">
-                    <div>GF <span class="font-medium text-gray-900">${gfHtml}</span></div>
-                    <div>GA <span class="font-medium text-gray-900">${gaHtml}</span></div>
-                    <div>Diff <span class="">${diffHtml}</span></div>
-                    <div>L10 <span class="font-medium text-gray-900">${l10}</span></div>
-                    <div>Strk <span class="font-medium text-gray-900">${strk}</span></div>
-                </div>
+                <div class="text-gray-700 font-semibold">${team.record.points} pts • GP ${gp} • ${pointsPct}</div>
+                <div class="text-gray-500">W ${wHtml} • L ${lHtml} • OTL ${oHtml} • Diff ${diffHtml}</div>
+                <div class="text-gray-500 text-[11px]">GF ${gfHtml} • GA ${gaHtml} • L10 ${l10} • Strk ${strk} • Win ${winPctStr}</div>
             `;
             card.appendChild(left);
             card.appendChild(right);
