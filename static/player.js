@@ -688,8 +688,20 @@ async function loadPlayer() {
             const awardsList = Array.isArray(data.awards) ? data.awards : [];
             const badgesList = Array.isArray(data.badges) ? data.badges : [];
 
+            const navAwardsBtn = document.getElementById('tabBtnAwardsNav') || document.getElementById('tabBtnAwards') || document.getElementById('tabBtnAwardsNav');
             if (!awardsList.length && !badgesList.length) {
-                awardsRoot.innerHTML = '<div class="muted">No awards or badges available.</div>'; return;
+                awardsRoot.innerHTML = '<div class="muted">No awards or badges available.</div>';
+                // Hide the awards tab/button entirely on small screens and desktop if empty
+                const awardsNav = document.getElementById('tabBtnAwardsNav') || document.getElementById('tabBtnAwards');
+                if (awardsNav) awardsNav.style.display = 'none';
+                // Also ensure awards panel is not shown
+                const awardsPanel = document.getElementById('tab-awards');
+                if (awardsPanel) awardsPanel.classList.add('hidden');
+                return;
+            } else {
+                // Ensure the nav button is visible if awards exist
+                const awardsNav = document.getElementById('tabBtnAwardsNav') || document.getElementById('tabBtnAwards');
+                if (awardsNav) awardsNav.style.display = '';
             }
 
             const formatSeasonId = (sid) => {

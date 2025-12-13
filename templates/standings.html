@@ -49,7 +49,10 @@
         <!-- Standings Table -->
         <div id="standingsContainer" class="hidden">
             <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
-                <div class="overflow-x-auto">
+                <!-- Mobile: stacked cards (no horizontal scroll) -->
+                <div id="standingsCards" class="sm:hidden px-4 py-4"></div>
+                <!-- Desktop/tablet: table view -->
+                <div class="hidden sm:block overflow-x-auto">
                     <table class="min-w-full">
                         <thead class="bg-gradient-to-r from-primary to-secondary text-white">
                             <tr>

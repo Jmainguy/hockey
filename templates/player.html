@@ -26,11 +26,11 @@
         <div id="teamHeaderContainer"></div>
 
         <!-- Sticky navigation -->
-        <nav id="playerStickyNav" aria-label="Player sections" class="hidden sticky top-0 z-40 bg-white/90 backdrop-blur-md rounded-xl shadow-md p-2 mb-6 flex gap-2">
-            <button data-target="overview" class="flex-1 px-4 py-2 rounded-lg font-semibold transition bg-primary text-white">Overview</button>
-            <button data-target="biography" class="flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Biography</button>
-            <button data-target="seasons" class="flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Seasons</button>
-            <button data-target="awards" class="flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Awards</button>
+        <nav id="playerStickyNav" aria-label="Player sections" class="hidden sticky top-0 z-40 bg-white/90 backdrop-blur-md rounded-xl shadow-md p-2 mb-6 flex flex-wrap sm:flex-nowrap gap-2">
+            <button data-target="overview" class="w-full sm:flex-1 px-4 py-2 rounded-lg font-semibold transition bg-primary text-white">Overview</button>
+            <button data-target="biography" class="w-full sm:flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Biography</button>
+            <button data-target="seasons" class="w-full sm:flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Seasons</button>
+            <button id="tabBtnAwardsNav" data-target="awards" class="w-full sm:flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Awards</button>
         </nav>
 
         <div id="playerContainer">

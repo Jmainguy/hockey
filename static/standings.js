@@ -65,6 +65,8 @@ async function loadStandings() {
 function renderStandings() {
     const tbody = document.getElementById('standingsBody');
     tbody.innerHTML = '';
+    const cardsRoot = document.getElementById('standingsCards');
+    if (cardsRoot) cardsRoot.innerHTML = '';
 
     // Filter teams based on current filter
     let filteredTeams = allTeams;
@@ -94,6 +96,7 @@ function renderStandings() {
         const maxPoints = gp * 2; // Maximum possible points
         const pointsPct = maxPoints > 0 ? ((team.record.points / maxPoints) * 100).toFixed(1) : '0.0';
         
+        // Desktop row
         const row = document.createElement('tr');
         row.className = 'hover:bg-gray-50 transition';
         
@@ -123,7 +126,22 @@ function renderStandings() {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-center text-gray-700 font-medium">${pointsPct}</td>
         `;
-        
         tbody.appendChild(row);
+
+        // Mobile card
+        if (cardsRoot) {
+            const card = document.createElement('div');
+            card.className = 'bg-white rounded-lg shadow mb-3 p-3 flex items-center justify-between gap-3';
+            const left = document.createElement('div');
+            left.className = 'flex items-center gap-3 min-w-0';
+            const imgHtml = logoUrl ? `<img src="${logoUrl}" alt="${team.abbrev}" class="w-10 h-10 object-contain flex-shrink-0" onerror="this.style.display='none'">` : `<div class="w-10 h-10 bg-gray-100 flex items-center justify-center rounded">${(team.abbrev||'').substring(0,3).toUpperCase()}</div>`;
+            left.innerHTML = `${imgHtml}<div class="min-w-0"><div class="font-bold text-gray-900 truncate">${team.name}</div><div class="text-xs text-gray-500 truncate">${team.division}</div></div>`;
+            const right = document.createElement('div');
+            right.className = 'text-right text-sm';
+            right.innerHTML = `<div class="text-gray-700 font-semibold">${team.record.points} pts</div><div class="text-gray-500">GP ${gp} • W ${team.record.wins}</div>`;
+            card.appendChild(left);
+            card.appendChild(right);
+            cardsRoot.appendChild(card);
+        }
     });
 }
