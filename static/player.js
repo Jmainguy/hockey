@@ -1,5 +1,7 @@
 // Player page JS - fetches landing data and displays it
 
+let teamObj = null;
+
 function getPlayerIdFromPath() {
     const parts = window.location.pathname.split('/').filter(Boolean);
     return parts[parts.length - 1];
@@ -152,12 +154,57 @@ async function loadPlayer() {
         }
         document.getElementById('playerName').textContent = displayName;
 
-        // Set back to team link using team ID
+        // Set back to team link using team ID; also populate shared header when possible
         const teamId = resolve(data.currentTeamId) || resolve(data.teamId) || resolve(data.currentTeamAbbrev) || resolve(data.teamAbbrev) || '';
         const backToTeamLink = document.getElementById('backToTeam');
         if (backToTeamLink && teamId) {
             backToTeamLink.href = `/team/${teamId}`;
             backToTeamLink.classList.remove('hidden');
+        }
+
+        // Build a light-weight team object for the shared header
+        try {
+            // Use resolve() helper to ensure string values (handles objects like {default: '...'} returned by some APIs)
+            const tid = resolve(data.currentTeamId) || resolve(data.teamId) || '';
+            const tabb = (resolve(data.currentTeamAbbrev) || resolve(data.teamAbbrev) || '').toLowerCase();
+            teamObj = {
+                id: tid || null,
+                abbreviation: tabb || null,
+                name: resolve(data.currentTeamName) || resolve(data.teamCommonName) || resolve(data.currentTeamAbbrev) || '',
+                logo: resolve(data.currentTeamLogo) || '',
+                wordmarkUrl: resolve(data.currentTeamWordmark) || ''
+            };
+        } catch (e) {
+            teamObj = null;
+        }
+
+        if (teamObj && window.populateSharedHeader) {
+            try {
+                const idOrAbbr = teamObj.abbreviation || teamObj.id || '';
+                if (idOrAbbr) {
+                    try {
+                        const resp = await fetch(`/api/team/${idOrAbbr}`);
+                        if (resp.ok) {
+                            const td = await resp.json();
+                            if (td.teams && td.teams.length > 0) {
+                                const fullTeam = td.teams[0];
+                                try { window.populateSharedHeader(fullTeam, 'Player'); } catch (e) { console.error('populateSharedHeader error', e); }
+                                try { if (fullTeam.name && fullTeam.name.trim()) document.title = fullTeam.name + ' — Player'; } catch (e) {}
+                            } else {
+                                try { window.populateSharedHeader(teamObj, 'Player'); } catch (e) { console.error('populateSharedHeader error', e); }
+                            }
+                        } else {
+                            try { window.populateSharedHeader(teamObj, 'Player'); } catch (e) { console.error('populateSharedHeader error', e); }
+                        }
+                    } catch (e) {
+                        try { window.populateSharedHeader(teamObj, 'Player'); } catch (err) { console.error('populateSharedHeader error', err); }
+                    }
+                } else {
+                    try { window.populateSharedHeader(teamObj, 'Player'); } catch (e) { console.error('populateSharedHeader error', e); }
+                }
+            } catch (e) {
+                try { window.populateSharedHeader(teamObj, 'Player'); } catch (err) { console.error('populateSharedHeader error', err); }
+            }
         }
 
         let position = data.position || data.primaryPosition || '';

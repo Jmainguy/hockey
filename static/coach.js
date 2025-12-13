@@ -9,6 +9,7 @@ let goalies = [];
 let teamAbbrev = '';
 let draggedPlayer = null;
 let currentTab = 'even-strength';
+let teamObj = null; // store fetched team details
 
 // Load lineup from localStorage
 function loadSavedLineup() {
@@ -245,18 +246,10 @@ async function loadCoach() {
             const teamData = await teamResponse.json();
             if (teamData.teams && teamData.teams.length > 0) {
                 const team = teamData.teams[0];
+                teamObj = team;
                 teamAbbrev = team.abbreviation;
-                document.getElementById('teamName').textContent = team.name;
-                
-                // Set team logo
-                if (teamAbbrev) {
-                    const logoContainer = document.getElementById('teamLogoContainer');
-                    const logoEl = document.createElement('img');
-                    logoEl.alt = `${teamAbbrev} logo`;
-                    logoEl.className = 'w-16 h-16 object-contain drop-shadow-md';
-                    logoEl.src = `https://assets.nhle.com/logos/nhl/svg/${teamAbbrev.toUpperCase()}_light.svg`;
-                    logoContainer.appendChild(logoEl);
-                }
+                try { document.title = `${team.name} — Coach`; } catch (e) {}
+                if (window.populateSharedHeader) window.populateSharedHeader(team);
             }
         }
 
@@ -288,6 +281,7 @@ async function loadCoach() {
             // Hide loading, show coach
             document.getElementById('loading').classList.add('hidden');
             document.getElementById('coachSection').classList.remove('hidden');
+            if (window.populateSharedHeader && teamObj) window.populateSharedHeader(teamObj)
         } else {
             showError('No players found in roster');
         }
@@ -380,9 +374,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 
 // Event listeners
-document.getElementById('backToTeam').addEventListener('click', goBackToTeam);
-document.getElementById('saveLineup').addEventListener('click', saveLineup);
-document.getElementById('resetLineup').addEventListener('click', resetLineup);
+document.getElementById('backToTeam')?.addEventListener('click', goBackToTeam);
+document.getElementById('saveLineup')?.addEventListener('click', saveLineup);
+document.getElementById('resetLineup')?.addEventListener('click', resetLineup);
 
 // Load on page load
 loadCoach();
+
+// Header navigation buttons (appear in teamHeader)
+// Header navigation is handled centrally by team-header.js

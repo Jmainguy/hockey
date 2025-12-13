@@ -104,7 +104,7 @@ function renderStandings() {
                 <span class="text-lg font-bold text-gray-700">${index + 1}</span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
-                <a href="/team/${team.id}" class="flex items-center gap-3 hover:text-primary transition group">
+                <a href="/team/${(team.abbrev || '').toString().toLowerCase()}" class="flex items-center gap-3 hover:text-primary transition group">
                     ${logoUrl ? `<img src="${logoUrl}" alt="${team.abbrev}" class="w-8 h-8 object-contain" onerror="this.style.display='none'">` : ''}
                     <div>
                         <div class="font-bold text-gray-900 group-hover:text-primary">${team.name}</div>

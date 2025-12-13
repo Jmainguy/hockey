@@ -6,6 +6,7 @@ let roster = [];
 let currentPlayerIndex = 0;
 let revealStep = 0; // 0=nothing, 1=name, 2=number, 3=position, 4=birthplace
 let teamAbbrev = '';
+let teamObj = null; // populated from /api/team response
 
 // Position mapping
 const positionMap = {
@@ -29,14 +30,11 @@ async function loadTrivia() {
             const teamData = await teamResponse.json();
             if (teamData.teams && teamData.teams.length > 0) {
                 const team = teamData.teams[0];
+                teamObj = team;
                 teamAbbrev = team.abbreviation;
-                document.getElementById('teamName').textContent = team.name;
-                
-                // Set team logo background
-                if (teamAbbrev) {
-                    const teamLogoBg = document.getElementById('teamLogoBg');
-                    teamLogoBg.style.backgroundImage = `url('https://assets.nhle.com/logos/nhl/svg/${teamAbbrev.toUpperCase()}_light.svg')`;
-                }
+                // Set page title and use shared header
+                try { document.title = `${team.name} — Trivia`; } catch (e) {}
+                if (window.populateSharedHeader) window.populateSharedHeader(team);
             }
         }
 
@@ -69,6 +67,7 @@ async function loadTrivia() {
 
             // Load first player
             loadPlayer();
+                if (window.populateSharedHeader && teamObj) window.populateSharedHeader(teamObj)
         } else {
             showError('No players found in roster');
         }
@@ -194,11 +193,14 @@ function goBackToTeam() {
 }
 
 // Event listeners
-document.getElementById('revealBtn').addEventListener('click', reveal);
-document.getElementById('nextBtn').addEventListener('click', nextPlayer);
-document.getElementById('backToTeam').addEventListener('click', goBackToTeam);
-document.getElementById('restartBtn').addEventListener('click', restartTrivia);
-document.getElementById('backToTeamBtn').addEventListener('click', goBackToTeam);
+document.getElementById('revealBtn')?.addEventListener('click', reveal);
+document.getElementById('nextBtn')?.addEventListener('click', nextPlayer);
+document.getElementById('backToTeam')?.addEventListener('click', goBackToTeam);
+document.getElementById('restartBtn')?.addEventListener('click', restartTrivia);
+document.getElementById('backToTeamBtn')?.addEventListener('click', goBackToTeam);
 
 // Load trivia on page load
 loadTrivia();
+
+// Header navigation buttons
+// Header navigation is handled centrally by team-header.js

@@ -268,6 +268,34 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 	}
 
 	// Cache the result
+	// Determine a wordmark URL (prefer overrides for known exceptions)
+	overrides := map[string]string{
+		"WSH": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/capitals/logos/wsh-wordmark-sept25_ee1aiv",
+		"VGK": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/goldenknights/logos/vgk-wordmark-new",
+		"BOS": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/bruins/logos/BOS-Wordmark-128x44-Dark_iezh8v",
+		"DET": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/redwings/logos/det_wordmark_100_1_wtlln0",
+		"TOR": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/mapleleafs/logos/tor-wordmark",
+		"UTA": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/utah/logos/uta-158x40",
+		"CBJ": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/bluejackets/logos/cbj-wordmark-nationwide4",
+		"CGY": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/flames/logos/cgy_wordmark_resized_jx4bam",
+	}
+
+	wordmark := ""
+	if override, ok := overrides[team.Abbreviation]; ok {
+		if resp, err := httpClient.Head(override); err == nil && resp.StatusCode == 200 {
+			wordmark = override
+		}
+	}
+	if wordmark == "" {
+		parts := strings.Split(strings.ToLower(team.Name), " ")
+		org := parts[len(parts)-1]
+		heuristic := fmt.Sprintf("https://media.d3.nhle.com/image/private/t_q-best/prd/assets/%s/logos/%s-wordmark", org, strings.ToLower(team.Abbreviation))
+		if resp, err := httpClient.Head(heuristic); err == nil && resp.StatusCode == 200 {
+			wordmark = heuristic
+		}
+	}
+	team.WordmarkURL = wordmark
+
 	cacheMutex.Lock()
 	teamCache[teamId] = &team
 	lastCacheTime = time.Now()
@@ -328,7 +356,8 @@ func GetRoster(teamId string) (*RosterResponse, error) {
 	// Parse roster response
 	var rosterResp struct {
 		Forwards []struct {
-			ID        int `json:"id"`
+			ID int `json:"id"`
+
 			FirstName struct {
 				Default string `json:"default"`
 			} `json:"firstName"`

@@ -23,35 +23,13 @@
 </head>
 <body class="bg-gray-50 min-h-screen">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        <header class="bg-gradient-to-r from-primary to-secondary text-white rounded-2xl p-6 shadow-lg mb-6 relative overflow-hidden">
-            <div class="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.2),transparent_60%)]"></div>
-            <div class="relative z-10 flex items-center justify-between">
-                <h1 class="text-3xl font-extrabold tracking-tight flex items-center gap-3"><span>🏒</span> NHL Fan Hub</h1>
-                <div class="flex gap-2">
-                    <button id="scheduleBtn" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition">📅 Schedule</button>
-                    <button id="coachBtn" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition">📋 Coach</button>
-                    <button id="triviaBtn" class="px-4 py-2 bg-accent hover:bg-accent/90 text-gray-900 rounded-lg font-semibold transition">🎯 Trivia</button>
-                    <a href="/" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">← Teams</a>
-                </div>
-            </div>
-        </header>
+        <!-- Site header removed for team pages; menu moved into the team header below -->
 
         <div>
             <div id="loading" class="text-center py-12 text-gray-500 text-lg">Loading team data...</div>
             <div id="error" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4"></div>
 
-            <section id="teamHeader" class="hidden bg-white rounded-2xl shadow-md p-6 mb-6">
-                <div class="flex items-center gap-4">
-                    <div id="teamLogoContainer" class="w-20 h-20"></div>
-                    <div>
-                        <h2 id="teamName" class="text-3xl font-bold text-gray-800 mb-2"></h2>
-                        <div class="flex gap-3 text-sm">
-                            <span id="teamDivision" class="px-3 py-1 bg-primary/10 text-primary rounded-full font-semibold"></span>
-                            <span id="teamConference" class="px-3 py-1 bg-secondary/10 text-secondary rounded-full font-semibold"></span>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            <div id="teamHeaderContainer"></div>
 
             <section id="teamRecordSection" class="hidden bg-white rounded-2xl shadow-md p-6 mb-6">
                 <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">Current Record <span class="h-1 w-16 bg-accent rounded-full"></span></h2>
@@ -79,15 +57,27 @@
                 </div>
             </section>
 
-            <!-- Tabs for Roster and Prospects -->
+            <!-- Tabs for News, Transactions, Roster, Prospects -->
             <div class="bg-white rounded-2xl shadow-md p-6 hidden" id="rosterProspectsSection">
                 <div class="flex gap-4 border-b border-gray-200 mb-6">
-                    <button id="rosterTab" class="tab-btn px-6 py-3 font-bold text-lg border-b-4 border-primary text-primary transition">
-                        Team Roster
-                    </button>
-                    <button id="prospectsTab" class="tab-btn px-6 py-3 font-bold text-lg border-b-4 border-transparent text-gray-500 hover:text-gray-700 transition">
-                        Prospects
-                    </button>
+                    <button id="newsTab" class="tab-btn px-6 py-3 font-bold text-lg border-b-4 border-transparent text-gray-500 hover:text-gray-700 transition">News</button>
+                    <button id="transactionsTab" class="tab-btn px-6 py-3 font-bold text-lg border-b-4 border-transparent text-gray-500 hover:text-gray-700 transition">Transactions</button>
+                    <button id="rosterTab" class="tab-btn px-6 py-3 font-bold text-lg border-b-4 border-primary text-primary transition">Team Roster</button>
+                    <button id="prospectsTab" class="tab-btn px-6 py-3 font-bold text-lg border-b-4 border-transparent text-gray-500 hover:text-gray-700 transition">Prospects</button>
+                </div>
+
+                <!-- News Section -->
+                <div id="newsContent" class="tab-content hidden">
+                    <div id="newsLoading" class="text-center py-8 text-gray-500">Loading news...</div>
+                    <div id="newsError" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4"></div>
+                    <div id="newsBody"></div>
+                </div>
+
+                <!-- Transactions Section -->
+                <div id="transactionsContent" class="tab-content hidden">
+                    <div id="transactionsLoading" class="text-center py-8 text-gray-500">Loading transactions...</div>
+                    <div id="transactionsError" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4"></div>
+                    <div id="transactionsBody"></div>
                 </div>
 
                 <!-- Roster Section -->
@@ -132,6 +122,8 @@
         </div>
     </div>
 
+    <script src="/static/team-header.js"></script>
     <script src="/static/team.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </body>
 </html>

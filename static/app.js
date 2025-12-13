@@ -1,4 +1,9 @@
 // NHL Fan Hub - Main App
+let teamsRetryTimer = null;
+let teamsBackoff = 0; // exponent counter
+const teamsBaseDelay = 10000; // 10s base
+const teamsMaxDelay = 5 * 60 * 1000; // 5 minutes max
+
 document.addEventListener('DOMContentLoaded', function() {
     loadTeams();
 });
@@ -7,7 +12,10 @@ async function loadTeams() {
     try {
         const response = await fetch('/api/teams');
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            console.warn('loadTeams received non-OK response:', response.status);
+            // Keep showing loading UI and retry in background
+            scheduleTeamsRetry();
+            return;
         }
         const data = await response.json();
         
@@ -15,6 +23,8 @@ async function loadTeams() {
         const teamLoading = document.getElementById('teamLoading');
         
         teamsGrid.innerHTML = '';
+        // Reset backoff on successful fetch
+        teamsBackoff = 0;
         teamLoading.style.display = 'none';
         
         if (data.teams && data.teams.length > 0) {
@@ -73,14 +83,64 @@ async function loadTeams() {
                     });
                 });
             });
+            // Populate searchable datalist for quick navigation
+            const datalist = document.getElementById('teamsDatalist');
+            const teamSearch = document.getElementById('teamSearch');
+            if (datalist && teamSearch) {
+                datalist.innerHTML = '';
+                data.teams.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.name;
+                    opt.dataset.id = t.id;
+                    datalist.appendChild(opt);
+                });
+
+                // Do not pre-select or persist last chosen team; start with empty search each visit
+                teamSearch.value = '';
+                teamSearch.addEventListener('change', () => {
+                    const name = teamSearch.value;
+                    // find team by name (case-sensitive match expected from datalist)
+                    const found = data.teams.find(t => t.name === name);
+                    if (found) {
+                        const ab = (found.abbrev || found.abbrev || '').toString().toLowerCase();
+                        window.location.href = `/team/${ab || found.id}`;
+                    }
+                });
+            }
         } else {
             teamsGrid.innerHTML = '<p>No teams found</p>';
         }
     } catch (error) {
         console.error('Error loading teams:', error);
-        const teamsGrid = document.getElementById('teamsGrid');
-        teamsGrid.innerHTML = `<p style="color: red;">Error loading teams: ${error.message}</p>`;
+        // Keep showing the loading message and retry after 10s
+        scheduleTeamsRetry();
     }
+}
+
+function scheduleTeamsRetry() {
+    // Avoid multiple timers
+    if (teamsRetryTimer) return;
+    const teamLoading = document.getElementById('teamLoading');
+    // compute exponential backoff delay
+    teamsBackoff = Math.min(teamsBackoff + 1, 10); // cap exponent to avoid overflow
+    let delay = teamsBaseDelay * Math.pow(2, teamsBackoff - 1);
+    if (delay > teamsMaxDelay) delay = teamsMaxDelay;
+
+    let remaining = Math.floor(delay / 1000);
+    if (teamLoading) {
+        teamLoading.style.display = '';
+        teamLoading.textContent = `Loading teams... retrying in ${remaining}s`;
+    }
+
+    teamsRetryTimer = setInterval(() => {
+        remaining -= 1;
+        if (teamLoading) teamLoading.textContent = `Loading teams... retrying in ${remaining}s`;
+        if (remaining <= 0) {
+            clearInterval(teamsRetryTimer);
+            teamsRetryTimer = null;
+            loadTeams();
+        }
+    }, 1000);
 }
 
 function createTeamCard(team) {
@@ -93,7 +153,7 @@ function createTeamCard(team) {
     const logoDark = abbrev ? `https://assets.nhle.com/logos/nhl/svg/${abbrev}_dark.svg` : '';
 
     const a = document.createElement('a');
-    a.href = `/team/${team.id}`;
+    a.href = `/team/${(team.abbrev || team.abbrev || '').toString().toLowerCase()}`;
     a.className = 'group relative flex flex-col items-center rounded-2xl border border-gray-200 bg-white p-6 shadow-sm hover:shadow-xl hover:border-accent transition duration-200';
     a.setAttribute('aria-label', `View ${team.name} details`);
 

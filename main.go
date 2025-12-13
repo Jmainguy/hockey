@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -47,6 +48,8 @@ func main() {
 	router.HandleFunc("/api/schedule/{date}", handleAPISchedule).Methods("GET")
 	router.HandleFunc("/api/team-schedule/{teamId}", handleAPITeamSchedule).Methods("GET")
 	router.HandleFunc("/api/gamecenter/{gameId}/landing", handleAPIGameLanding).Methods("GET")
+	router.HandleFunc("/api/team-news/{teamId}", handleAPITeamNews).Methods("GET")
+	router.HandleFunc("/api/team-transactions/{teamId}", handleAPITeamTransactions).Methods("GET")
 
 	port := "8080"
 	fmt.Printf("Server starting on http://localhost:%s\n", port)
@@ -80,6 +83,17 @@ func handleScores(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTeam(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	teamId := vars["teamId"]
+	// If teamId is numeric, try to map to abbreviation and redirect to abbrev-based URL
+	if teamId != "" {
+		if id, err := strconv.Atoi(teamId); err == nil {
+			if abbr, ok := teamIDToAbbr[id]; ok && abbr != "" {
+				http.Redirect(w, r, fmt.Sprintf("/team/%s", strings.ToLower(abbr)), http.StatusFound)
+				return
+			}
+		}
+	}
 	serveEmbeddedFile(w, r, "team.html")
 }
 

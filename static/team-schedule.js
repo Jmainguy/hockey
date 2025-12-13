@@ -6,6 +6,7 @@ let currentYear = new Date().getFullYear();
 let currentMonth = new Date().getMonth(); // 0-11
 let allGames = [];
 let scheduleCache = {}; // Cache schedules by season
+let teamObj = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     // Get team ID from URL
@@ -73,13 +74,19 @@ async function loadTeamInfo() {
         
         if (data.teams && data.teams.length > 0) {
             const team = data.teams[0];
+            teamObj = team;
             currentTeamAbbrev = team.abbreviation;
             currentTeamName = team.name;
-            document.getElementById('teamNameHeader').textContent = `${team.name} Schedule`;
+            // set doc title
+            try { document.title = `${team.name} — Schedule`; } catch (e) {}
+            // Use shared header populator
+            if (window.populateSharedHeader) window.populateSharedHeader(teamObj, 'Schedule');
         }
     } catch (error) {
         console.error('Error loading team info:', error);
     }
+
+        // Use shared populateSharedHeader from team-header.js
 }
 
 async function loadSchedule(season = null) {

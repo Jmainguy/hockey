@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Team Schedule - NHL Fan Hub</title>
+    <title>Schedule - NHL Fan Hub</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -23,18 +23,9 @@
 </head>
 <body class="bg-gray-50 min-h-screen">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        <header class="bg-gradient-to-r from-primary to-secondary text-white rounded-2xl p-6 shadow-lg mb-6 relative overflow-hidden">
-            <div class="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.2),transparent_60%)]"></div>
-            <div class="relative z-10 flex items-center justify-between">
-                <h1 class="text-3xl font-extrabold tracking-tight flex items-center gap-3">
-                    <span>📅</span> 
-                    <span id="teamNameHeader">Team Schedule</span>
-                </h1>
-                <a id="backToTeam" href="#" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">← Back to Team</a>
-            </div>
-        </header>
+            <div id="teamHeaderContainer"></div>
 
-        <div id="loading" class="text-center py-12 text-gray-500 text-lg">Loading schedule...</div>
+            <div id="loading" class="text-center py-12 text-gray-500 text-lg">Loading schedule...</div>
         <div id="error" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4"></div>
 
         <!-- Calendar Controls -->
@@ -102,6 +93,7 @@
     </div>
 
     <script src="/static/game-details.js"></script>
+    <script src="/static/team-header.js"></script>
     <script src="/static/team-schedule.js"></script>
 </body>
 </html>

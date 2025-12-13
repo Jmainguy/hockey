@@ -32,7 +32,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Setup tab buttons
         document.getElementById('rosterTab')?.addEventListener('click', () => switchTab('roster'));
-    document.getElementById('prospectsTab')?.addEventListener('click', () => switchTab('prospects'));
+        document.getElementById('prospectsTab')?.addEventListener('click', () => switchTab('prospects'));
+        document.getElementById('newsTab')?.addEventListener('click', () => switchTab('news'));
+        document.getElementById('transactionsTab')?.addEventListener('click', () => switchTab('transactions'));
     
     // Setup filter buttons
     const filterBtns = document.querySelectorAll('.filter-btn');
@@ -136,8 +138,21 @@ function displayTeamDetails(team) {
     // Store team abbreviation for prospects
     currentTeamAbbrev = team.abbreviation;
     
-    // Use the full team name from API (e.g., "Buffalo Sabres")
-    document.getElementById('teamName').textContent = team.name;
+    // Populate shared header (logo/wordmark/name/back link)
+    if (window.populateSharedHeader) {
+        try { window.populateSharedHeader(team); } catch (e) { console.error('populateSharedHeader error', e); }
+    }
+
+    // Set the page title to the team's full name for better UX and sharing
+    if (typeof document !== 'undefined') {
+        try {
+            if (team.name && team.name.trim() !== '') {
+                document.title = team.name + ' — Hockey';
+            }
+        } catch (e) {
+            // ignore
+        }
+    }
     
     // Display division with rank
     const divisionRankText = team.divisionRank === 1 ? 'Leader' : 
@@ -153,22 +168,7 @@ function displayTeamDetails(team) {
                               `${team.conferenceRank}th`;
     document.getElementById('teamConference').textContent = `${team.conference.name} - ${conferenceRankText}`;
 
-    // Inject team logo if abbreviation available
-    const logoContainer = document.getElementById('teamLogoContainer');
-    if (logoContainer && team.abbreviation) {
-        const logoEl = document.createElement('img');
-        logoEl.alt = `${team.abbreviation || team.name} logo`;
-        logoEl.className = 'w-20 h-20 object-contain drop-shadow-md';
-        logoEl.src = `https://assets.nhle.com/logos/nhl/svg/${team.abbreviation.toUpperCase()}_light.svg`;
-        logoEl.onerror = () => {
-            if (!logoEl.dataset.alt) {
-                logoEl.dataset.alt = '1';
-                logoEl.src = logoEl.src.replace('_light', '_dark');
-            } else { logoEl.classList.add('hidden'); }
-        };
-        logoContainer.innerHTML = '';
-        logoContainer.appendChild(logoEl);
-    }
+    // Header population handled by shared renderer above
     
     // Display record
     if (team.record && team.record.length > 0) {
@@ -181,35 +181,314 @@ function displayTeamDetails(team) {
         teamRecordSection.classList.remove('hidden');
     }
     
-    teamHeader.classList.remove('hidden');
+    // teamHeader visibility handled by shared renderer
     loading.classList.add('hidden');
 }
 
 function switchTab(tab) {
+    const newsTab = document.getElementById('newsTab');
+    const transactionsTab = document.getElementById('transactionsTab');
+    const newsContent = document.getElementById('newsContent');
+    const transactionsContent = document.getElementById('transactionsContent');
     const rosterTab = document.getElementById('rosterTab');
     const prospectsTab = document.getElementById('prospectsTab');
     const rosterContent = document.getElementById('rosterContent');
     const prospectsContent = document.getElementById('prospectsContent');
-    
+    const rosterProspectsSection = document.getElementById('rosterProspectsSection');
+    // ensure the roster/prospects tab area is visible by default
+    if (rosterProspectsSection) rosterProspectsSection.classList.remove('hidden');
+
+    // helper to deactivate a tab element
+    const deactivate = (el) => {
+        if (!el) return;
+        el.classList.remove('border-primary', 'text-primary');
+        el.classList.add('border-transparent', 'text-gray-500');
+    };
+
+    // deactivate all tabs and hide all content panels
+    deactivate(newsTab);
+    deactivate(transactionsTab);
+    deactivate(rosterTab);
+    deactivate(prospectsTab);
+
+    if (newsContent) newsContent.classList.add('hidden');
+    if (transactionsContent) transactionsContent.classList.add('hidden');
+    if (rosterContent) rosterContent.classList.add('hidden');
+    if (prospectsContent) prospectsContent.classList.add('hidden');
+
+    // activate the selected tab and show its content
+    if (tab === 'news') {
+        if (newsTab) {
+            newsTab.classList.add('border-primary', 'text-primary');
+            newsTab.classList.remove('border-transparent', 'text-gray-500');
+        }
+        if (newsContent) newsContent.classList.remove('hidden');
+        // hide roster/prospects content panels when viewing news (tabs remain visible)
+        if (rosterContent) rosterContent.classList.add('hidden');
+        if (prospectsContent) prospectsContent.classList.add('hidden');
+        loadTeamNews();
+        return;
+    }
+
+    if (tab === 'transactions') {
+        if (transactionsTab) {
+            transactionsTab.classList.add('border-primary', 'text-primary');
+            transactionsTab.classList.remove('border-transparent', 'text-gray-500');
+        }
+        if (transactionsContent) transactionsContent.classList.remove('hidden');
+        if (rosterContent) rosterContent.classList.add('hidden');
+        if (prospectsContent) prospectsContent.classList.add('hidden');
+        loadTransactions();
+        return;
+    }
+
     if (tab === 'roster') {
-        rosterTab.classList.add('border-primary', 'text-primary');
-        rosterTab.classList.remove('border-transparent', 'text-gray-500');
-        prospectsTab.classList.add('border-transparent', 'text-gray-500');
-        prospectsTab.classList.remove('border-primary', 'text-primary');
-        rosterContent.classList.remove('hidden');
-        prospectsContent.classList.add('hidden');
-    } else {
+        if (rosterTab) {
+            rosterTab.classList.add('border-primary', 'text-primary');
+            rosterTab.classList.remove('border-transparent', 'text-gray-500');
+        }
+        if (rosterContent) rosterContent.classList.remove('hidden');
+        return;
+    }
+
+    // default to prospects
+    if (prospectsTab) {
         prospectsTab.classList.add('border-primary', 'text-primary');
         prospectsTab.classList.remove('border-transparent', 'text-gray-500');
-        rosterTab.classList.add('border-transparent', 'text-gray-500');
-        rosterTab.classList.remove('border-primary', 'text-primary');
-        prospectsContent.classList.remove('hidden');
-        rosterContent.classList.add('hidden');
-        
-        // Load prospects if not already loaded
-        if (allProspects.length === 0 && currentTeamAbbrev) {
-            loadProspects();
+    }
+    if (prospectsContent) prospectsContent.classList.remove('hidden');
+    if (allProspects.length === 0 && currentTeamAbbrev) {
+        loadProspects();
+    }
+}
+
+async function loadTeamNews() {
+    const newsLoading = document.getElementById('newsLoading');
+    const newsError = document.getElementById('newsError');
+    const newsBody = document.getElementById('newsBody');
+    if (!currentTeamId) return;
+
+    try {
+        newsLoading.classList.remove('hidden');
+        newsError.classList.add('hidden');
+        newsBody.innerHTML = '';
+
+        const resp = await fetch(`/api/team-news/${currentTeamId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        renderNewsList(data.stories || []);
+        newsLoading.classList.add('hidden');
+    } catch (err) {
+        console.error('Error loading team news:', err);
+        newsLoading.classList.add('hidden');
+        newsError.textContent = `Error loading news: ${err.message}`;
+        newsError.classList.remove('hidden');
+    }
+}
+
+function renderNewsList(stories) {
+    const newsBody = document.getElementById('newsBody');
+    newsBody.innerHTML = '';
+    if (!stories || stories.length === 0) {
+        newsBody.innerHTML = '<div class="text-center py-8 text-gray-500">No recent news</div>';
+        return;
+    }
+
+    stories.forEach(story => {
+        const card = document.createElement('div');
+        card.className = 'p-4 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer';
+        const date = new Date(story.contentDate).toLocaleString();
+        const firstPart = story.parts && story.parts[0] ? story.parts[0] : null;
+        const firstPartContent = firstPart ? normalizeString(firstPart.content) : '';
+        const previewText = stripMarkdown(firstPartContent).slice(0,200) || normalizeString(story.summary || '');
+
+        card.innerHTML = `
+            <div class="flex gap-4">
+                    <div class="w-24 h-16 bg-gray-100 flex-shrink-0">
+                    ${story.thumbnail ? `<img src="${story.thumbnail}" alt="" class="w-full h-full object-cover object-top rounded">` : ''}
+                </div>
+                <div class="flex-1">
+                    <div class="font-semibold text-lg">${escapeHtml(story.title)}</div>
+                    <div class="text-sm text-gray-500">${date}</div>
+                    <div class="mt-2 text-gray-700 text-sm line-clamp-3">${escapeHtml(previewText)}</div>
+                </div>
+            </div>
+        `;
+        card.addEventListener('click', () => {
+            const nhlUrl = buildNHLStoryURL(story.url || story.Url || story.Url);
+            try {
+                window.open(nhlUrl, '_blank', 'noopener');
+            } catch (e) {
+                // fallback
+                window.open(nhlUrl, '_blank');
+            }
+        });
+        newsBody.appendChild(card);
+    });
+}
+
+function escapeHtml(s) {
+    if (!s) return '';
+    return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function buildNHLStoryURL(forgeUrl) {
+    if (!forgeUrl) return forgeUrl;
+    try {
+        const u = new URL(forgeUrl);
+        const parts = u.pathname.split('/').filter(Boolean);
+        const slug = parts.length ? parts[parts.length - 1] : '';
+        if (!slug) return forgeUrl;
+        return `https://www.nhl.com/news/${slug}`;
+    } catch (e) {
+        const parts = forgeUrl.split('/').filter(Boolean);
+        const slug = parts.length ? parts[parts.length - 1] : forgeUrl;
+        return `https://www.nhl.com/news/${slug}`;
+    }
+}
+
+function stripMarkdown(md) {
+    if (!md) return '';
+    // simple removal of images and links for preview
+    return md.replace(/!\[[^\]]*\]\([^\)]+\)/g, '').replace(/\[[^\]]+\]\([^\)]+\)/g, '').replace(/[#_*`>~-]/g, '');
+}
+
+function normalizeString(v) {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'string') {
+        const trimmed = v.trim();
+        if (trimmed === 'null' || trimmed === 'undefined') return '';
+        return v;
+    }
+    try {
+        return String(v);
+    } catch (e) {
+        return '';
+    }
+}
+
+function openStoryModal(story) {
+    const modal = document.getElementById('storyModal');
+    const content = document.getElementById('storyModalContent');
+    const closeBtn = document.getElementById('storyModalClose');
+    content.innerHTML = '';
+
+    // Title
+    const titleEl = document.createElement('h3');
+    titleEl.className = 'text-2xl font-bold';
+    titleEl.textContent = story.title;
+    content.appendChild(titleEl);
+
+    // Date
+    const dateEl = document.createElement('div');
+    dateEl.className = 'text-sm text-gray-500';
+    dateEl.textContent = new Date(story.contentDate).toLocaleString();
+    content.appendChild(dateEl);
+
+    // Render parts in order
+    if (story.parts && story.parts.length > 0) {
+        story.parts.forEach(p => {
+            const partNode = renderStoryPart(p);
+            if (partNode) content.appendChild(partNode);
+        });
+    }
+
+    modal.classList.remove('hidden');
+
+    closeBtn.onclick = () => { modal.classList.add('hidden'); };
+    modal.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
+}
+
+function renderStoryPart(p) {
+    if (!p) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'story-part';
+    const contentStr = normalizeString(p.content);
+    if (p.type === 'image') {
+        if (!contentStr) return null;
+        const img = document.createElement('img');
+        img.src = contentStr;
+        img.className = 'w-full rounded';
+        wrap.appendChild(img);
+        return wrap;
+    }
+    if (p.type === 'video') {
+        const video = document.createElement('video');
+        video.controls = true;
+        video.className = 'w-full rounded';
+        // try to detect if content is a JSON with a url
+        try {
+            const parsed = JSON.parse(contentStr || '""');
+            if (typeof parsed === 'string') video.src = parsed;
+            else if (parsed.url) video.src = parsed.url;
+            else video.src = contentStr;
+        } catch (e) {
+            video.src = contentStr;
         }
+        wrap.appendChild(video);
+        return wrap;
+    }
+    // default: markdown/html
+    const md = document.createElement('div');
+    md.className = 'prose max-w-none';
+    // Use marked to convert markdown/html safely
+    try {
+        md.innerHTML = marked.parse(contentStr || '');
+    } catch (e) {
+        md.textContent = contentStr || '';
+    }
+    wrap.appendChild(md);
+    return wrap;
+}
+
+async function loadTransactions() {
+    const body = document.getElementById('transactionsBody');
+    const loading = document.getElementById('transactionsLoading');
+    const error = document.getElementById('transactionsError');
+    loading.classList.remove('hidden');
+    error.classList.add('hidden');
+    body.innerHTML = '';
+    try {
+        if (!currentTeamId) throw new Error('No team selected');
+        const resp = await fetch(`/api/team-transactions/${currentTeamId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const txs = data.transactions || [];
+        if (!txs || txs.length === 0) {
+            body.innerHTML = '<div class="text-center py-8 text-gray-500">No recent transactions</div>';
+            loading.classList.add('hidden');
+            return;
+        }
+
+        // Render each transaction
+        txs.forEach(t => {
+            const card = document.createElement('div');
+            card.className = 'p-4 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer';
+            const date = t.date ? new Date(t.date).toLocaleString() : '';
+            const summary = normalizeString(t.summary) || '';
+            card.innerHTML = `
+                <div class="flex gap-4">
+                    <div class="w-24 h-16 bg-gray-100 flex-shrink-0">
+                        ${t.thumbnail ? `<img src="${t.thumbnail}" alt="" class="w-full h-full object-cover object-top rounded">` : ''}
+                    </div>
+                    <div class="flex-1">
+                        <div class="font-semibold text-lg">${escapeHtml(t.title)}</div>
+                        <div class="text-sm text-gray-500">${date}</div>
+                        <div class="mt-2 text-gray-700 text-sm line-clamp-3">${escapeHtml(stripMarkdown(summary).slice(0,300))}</div>
+                    </div>
+                </div>
+            `;
+            card.addEventListener('click', () => {
+                const nhlUrl = buildNHLStoryURL(t.url || t.Url || t.Url);
+                try { window.open(nhlUrl, '_blank', 'noopener'); } catch (e) { window.open(nhlUrl, '_blank'); }
+            });
+            body.appendChild(card);
+        });
+        loading.classList.add('hidden');
+    } catch (err) {
+        loading.classList.add('hidden');
+        error.textContent = `Error loading transactions: ${err.message}`;
+        error.classList.remove('hidden');
     }
 }
 
