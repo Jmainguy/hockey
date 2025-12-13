@@ -195,18 +195,39 @@ function renderStandings() {
             left.innerHTML = `${imgHtml}<div class="min-w-0"><div class="font-bold text-gray-900 truncate">${team.name}</div><div class="text-xs text-gray-500 truncate">${team.division}</div></div>`;
             const right = document.createElement('div');
             right.className = 'text-sm mt-2 sm:mt-0 sm:text-right';
-            const gf = team.goalsFor || '-';
-            const ga = team.goalsAgainst || '-';
-            const diff = (team.goalDiff !== undefined && team.goalDiff !== null) ? (team.goalDiff >= 0 ? `+${team.goalDiff}` : `${team.goalDiff}`) : '-';
+            const gf = team.goalsFor !== undefined && team.goalsFor !== null ? team.goalsFor : '-';
+            const ga = team.goalsAgainst !== undefined && team.goalsAgainst !== null ? team.goalsAgainst : '-';
+            const diffNum = (team.goalDiff !== undefined && team.goalDiff !== null) ? Number(team.goalDiff) : null;
+            const diff = diffNum !== null ? (diffNum >= 0 ? `+${diffNum}` : `${diffNum}`) : '-';
             const l10 = team.lastTen || '-';
             const strk = team.streak || '-';
+            const winPctStr = (team.winPct !== undefined && team.winPct !== null) ? (Number(team.winPct)*100).toFixed(1)+'%' : '-';
+
+            // build colored pieces
+            const wHtml = `<span class="text-green-600 font-semibold">${team.record.wins}</span>`;
+            const lHtml = `<span class="text-red-600 font-semibold">${team.record.losses}</span>`;
+            const oHtml = `<span class="text-yellow-600 font-semibold">${team.record.overtimeLosses}</span>`;
+            const gfHtml = (gf !== '-') ? `<span class="font-semibold text-gray-900">${gf}</span>` : `<span class="text-gray-500">-</span>`;
+            const gaHtml = (ga !== '-') ? `<span class="font-semibold text-gray-900">${ga}</span>` : `<span class="text-gray-500">-</span>`;
+            const diffHtml = (diffNum !== null) ? (diffNum >= 0 ? `<span class="text-green-600 font-semibold">+${diffNum}</span>` : `<span class="text-red-600 font-semibold">${diffNum}</span>`) : `<span class="text-gray-500">-</span>`;
+
             right.innerHTML = `
                 <div class="text-gray-700 font-semibold">${team.record.points} pts</div>
-                <div class="text-gray-500">GP ${gp} • W ${team.record.wins} • L ${team.record.losses} • OTL ${team.record.overtimeLosses}</div>
-                <div class="text-gray-500">GF ${gf} • GA ${ga} • Diff ${diff}</div>
-                <div class="text-gray-500">L10 ${l10} • Strk ${strk}</div>
-                <div class="text-gray-500">Win% ${(team.winPct !== undefined && team.winPct !== null) ? (Number(team.winPct)*100).toFixed(1)+'%' : '-'}</div>
-                <div class="text-gray-500">P% ${pointsPct}</div>
+                <div class="mt-1 grid grid-cols-2 gap-2 text-sm">
+                    <div class="text-gray-500">GP <span class="font-medium text-gray-900">${gp}</span></div>
+                    <div class="text-gray-500">P% <span class="font-medium text-gray-900">${pointsPct}</span></div>
+                    <div class="text-gray-500">W <span class="">${wHtml}</span></div>
+                    <div class="text-gray-500">L <span class="">${lHtml}</span></div>
+                    <div class="text-gray-500">OTL <span class="">${oHtml}</span></div>
+                    <div class="text-gray-500">Win% <span class="font-medium text-gray-900">${winPctStr}</span></div>
+                </div>
+                <div class="mt-2 grid grid-cols-2 gap-2 text-sm text-gray-500">
+                    <div>GF <span class="font-medium text-gray-900">${gfHtml}</span></div>
+                    <div>GA <span class="font-medium text-gray-900">${gaHtml}</span></div>
+                    <div>Diff <span class="">${diffHtml}</span></div>
+                    <div>L10 <span class="font-medium text-gray-900">${l10}</span></div>
+                    <div>Strk <span class="font-medium text-gray-900">${strk}</span></div>
+                </div>
             `;
             card.appendChild(left);
             card.appendChild(right);
