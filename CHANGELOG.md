@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/Jmainguy/hockey/compare/v1.4.4...v1.5.0) (2025-12-13)
+
+
+### Features
+
+* update standings page to have more informaiton ([3d01505](https://github.com/Jmainguy/hockey/commit/3d015055974a239270ef738d6a0ae4b44e28b1c3))
+
 ## [1.4.4](https://github.com/Jmainguy/hockey/compare/v1.4.3...v1.4.4) (2025-12-13)
 
 
