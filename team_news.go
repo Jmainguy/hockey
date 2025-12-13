@@ -34,11 +34,10 @@ type cacheEntry struct {
 const teamNewsTTL = 2 * time.Minute
 
 type TeamNewsStory struct {
-	Title       string      `json:"title"`
-	ContentDate string      `json:"contentDate"`
-	Thumbnail   string      `json:"thumbnail"`
-	Url         string      `json:"url"`
-	Parts       []StoryPart `json:"parts"`
+	Title       string `json:"title"`
+	ContentDate string `json:"contentDate"`
+	Thumbnail   string `json:"thumbnail"`
+	Url         string `json:"url"`
 }
 
 type StoryPart struct {
@@ -66,7 +65,11 @@ func handleAPITeamNews(w http.ResponseWriter, r *http.Request) {
 		if time.Since(e.ts) < teamNewsTTL {
 			teamNewsCache.RUnlock()
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(e.resp)
+			if err := json.NewEncoder(w).Encode(e.resp); err != nil {
+				fmt.Printf("error encoding cached team news response: %v\n", err)
+				http.Error(w, "Encoding error", http.StatusInternalServerError)
+				return
+			}
 			return
 		}
 	}
@@ -79,7 +82,11 @@ func handleAPITeamNews(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to fetch team news", http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			fmt.Printf("warning: closing team news resp body: %v\n", cerr)
+		}
+	}()
 
 	// If upstream rate-limits us, return cached response if available
 	if resp.StatusCode == http.StatusTooManyRequests {
@@ -88,7 +95,11 @@ func handleAPITeamNews(w http.ResponseWriter, r *http.Request) {
 			if time.Since(e.ts) < 10*teamNewsTTL {
 				teamNewsCache.RUnlock()
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(e.resp)
+				if err := json.NewEncoder(w).Encode(e.resp); err != nil {
+					fmt.Printf("error encoding cached team news response (rate-limited): %v\n", err)
+					http.Error(w, "Encoding error", http.StatusInternalServerError)
+					return
+				}
 				return
 			}
 		}
@@ -114,81 +125,12 @@ func handleAPITeamNews(w http.ResponseWriter, r *http.Request) {
 
 	stories := make([]TeamNewsStory, 0, len(apiResp.Items))
 	for _, item := range apiResp.Items {
+		// Only return summary fields (title, date, thumbnail, url). Full content is on nhl.com.
 		story := TeamNewsStory{
 			Title:       item.Title,
 			ContentDate: item.ContentDate,
 			Thumbnail:   item.Thumbnail.ThumbnailURL,
 			Url:         item.SelfUrl,
-			Parts:       []StoryPart{},
-		}
-		// Fetch full content from selfUrl and parse parts
-		if item.SelfUrl != "" {
-			if storyResp, err := http.Get(item.SelfUrl); err == nil {
-				defer storyResp.Body.Close()
-
-				var full struct {
-					Parts []struct {
-						Type    string      `json:"type"`
-						Content interface{} `json:"content"`
-						Image   struct {
-							TemplateURL  string `json:"templateUrl"`
-							ThumbnailURL string `json:"thumbnailUrl"`
-						} `json:"image"`
-					} `json:"parts"`
-					Fields struct {
-						Description string `json:"description"`
-					} `json:"fields"`
-				}
-				if err := json.NewDecoder(storyResp.Body).Decode(&full); err == nil {
-					// Use fields.description as fallback first part
-					if full.Fields.Description != "" {
-						story.Parts = append(story.Parts, StoryPart{Type: "markdown", Content: full.Fields.Description})
-					}
-					for _, p := range full.Parts {
-						switch p.Type {
-						case "html", "markdown", "text":
-							// content may be string or object; convert to string
-							var s string
-							switch c := p.Content.(type) {
-							case string:
-								s = c
-							default:
-								// try marshal back to string
-								if b, err := json.Marshal(c); err == nil {
-									s = string(b)
-								}
-							}
-							story.Parts = append(story.Parts, StoryPart{Type: "markdown", Content: s})
-						case "image":
-							// use provided image fields
-							imgURL := p.Image.TemplateURL
-							if imgURL == "" {
-								imgURL = p.Image.ThumbnailURL
-							}
-							if imgURL != "" {
-								story.Parts = append(story.Parts, StoryPart{Type: "image", Content: imgURL})
-							}
-						case "video":
-							// video content may be structured; attempt to extract a url
-							var s string
-							switch c := p.Content.(type) {
-							case string:
-								s = c
-							default:
-								if b, err := json.Marshal(c); err == nil {
-									s = string(b)
-								}
-							}
-							story.Parts = append(story.Parts, StoryPart{Type: "video", Content: s})
-						default:
-							// unknown type, stringify
-							if b, err := json.Marshal(p.Content); err == nil {
-								story.Parts = append(story.Parts, StoryPart{Type: "markdown", Content: string(b)})
-							}
-						}
-					}
-				}
-			}
 		}
 		stories = append(stories, story)
 	}
@@ -201,7 +143,11 @@ func handleAPITeamNews(w http.ResponseWriter, r *http.Request) {
 	teamNewsCache.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(respObj)
+	if err := json.NewEncoder(w).Encode(respObj); err != nil {
+		fmt.Printf("error encoding team news response: %v\n", err)
+		http.Error(w, "Encoding error", http.StatusInternalServerError)
+		return
+	}
 }
 
 // handleAPITeamTransactions fetches recent transactions for a team (basic implementation)
@@ -222,7 +168,11 @@ func handleAPITeamTransactions(w http.ResponseWriter, r *http.Request) {
 		if time.Since(e.ts) < teamNewsTTL {
 			teamTransactionsCache.RUnlock()
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(e.resp)
+			if err := json.NewEncoder(w).Encode(e.resp); err != nil {
+				fmt.Printf("error encoding cached team transactions response: %v\n", err)
+				http.Error(w, "Encoding error", http.StatusInternalServerError)
+				return
+			}
 			return
 		}
 	}
@@ -255,14 +205,20 @@ func handleAPITeamTransactions(w http.ResponseWriter, r *http.Request) {
 
 		if resp.StatusCode == http.StatusTooManyRequests {
 			// If upstream rate-limits, return cached if available
-			resp.Body.Close()
+			if cerr := resp.Body.Close(); cerr != nil {
+				fmt.Printf("warning: closing transactions resp body (rate-limited): %v\n", cerr)
+			}
 			teamTransactionsCache.RLock()
 			if e, ok := teamTransactionsCache.m[teamId]; ok {
 				// respect cached TTL
 				if time.Since(e.ts) < 10*teamNewsTTL {
 					teamTransactionsCache.RUnlock()
 					w.Header().Set("Content-Type", "application/json")
-					json.NewEncoder(w).Encode(e.resp)
+					if err := json.NewEncoder(w).Encode(e.resp); err != nil {
+						fmt.Printf("error encoding cached team transactions response (rate-limited): %v\n", err)
+						http.Error(w, "Encoding error", http.StatusInternalServerError)
+						return
+					}
 					return
 				}
 			}
@@ -286,11 +242,15 @@ func handleAPITeamTransactions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := json.NewDecoder(resp.Body).Decode(&pageResp); err != nil {
-			resp.Body.Close()
+			if cerr := resp.Body.Close(); cerr != nil {
+				fmt.Printf("warning: closing transactions resp body after decode error: %v\n", cerr)
+			}
 			http.Error(w, "Failed to decode transactions", http.StatusBadGateway)
 			return
 		}
-		resp.Body.Close()
+		if cerr := resp.Body.Close(); cerr != nil {
+			fmt.Printf("warning: closing transactions resp body: %v\n", cerr)
+		}
 
 		if len(pageResp.Items) == 0 {
 			break
@@ -369,5 +329,9 @@ func handleAPITeamTransactions(w http.ResponseWriter, r *http.Request) {
 	teamTransactionsCache.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(respObj)
+	if err := json.NewEncoder(w).Encode(respObj); err != nil {
+		fmt.Printf("error encoding transactions response: %v\n", err)
+		http.Error(w, "Encoding error", http.StatusInternalServerError)
+		return
+	}
 }

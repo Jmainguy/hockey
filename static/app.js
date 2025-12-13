@@ -123,7 +123,7 @@ async function loadTeams() {
                     teams.filter(t => !filter || t.name.toLowerCase().includes(filter.toLowerCase()))
                          .forEach(t => {
                         const btn = document.createElement('button');
-                        btn.className = 'p-3 bg-white rounded-lg shadow text-left flex items-center gap-3';
+                        btn.className = 'w-full p-3 bg-white rounded-lg shadow text-left flex items-center gap-3';
                         // Prefer a team-provided wordmark, otherwise NHL svg logo, otherwise fallback initials
                         const abbrev = (t.abbrev||t.abbreviation||'').toString().toUpperCase();
                         const wordmark = (t.wordmarkUrl || t.wordmark || '');
