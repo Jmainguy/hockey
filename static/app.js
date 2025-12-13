@@ -124,8 +124,21 @@ async function loadTeams() {
                          .forEach(t => {
                         const btn = document.createElement('button');
                         btn.className = 'p-3 bg-white rounded-lg shadow text-left flex items-center gap-3';
-                        const abbr = (t.abbrev||t.abbreviation||'').toString().toUpperCase();
-                        btn.innerHTML = `<div class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded">${abbr.slice(0,3)}</div><div class="flex-1">${t.name}</div>`;
+                        // Prefer a team-provided wordmark, otherwise NHL svg logo, otherwise fallback initials
+                        const abbrev = (t.abbrev||t.abbreviation||'').toString().toUpperCase();
+                        const wordmark = (t.wordmarkUrl || t.wordmark || '');
+                        const logoSrc = wordmark || (abbrev ? `https://assets.nhle.com/logos/nhl/svg/${abbrev}_light.svg` : '');
+
+                        let imgHTML = '';
+                        if (logoSrc) {
+                            imgHTML = `<img src="${logoSrc}" alt="${t.name}" class="h-10 w-20 object-contain" onerror="this.dataset.err=1;this.src='https://assets.nhle.com/logos/nhl/svg/${abbrev}_dark.svg'">`;
+                        } else {
+                            imgHTML = `<div class="w-10 h-10 flex items-center justify-center bg-gray-100 rounded text-sm font-semibold">${abbrev.slice(0,3)}</div>`;
+                        }
+
+                        const title = `<div class="flex-1"><div class=\"text-base font-bold text-gray-900\">${t.name}</div><div class=\"text-sm text-gray-600\">${abbrev} • ${t.record?.points ?? ''} pts</div></div>`;
+
+                        btn.innerHTML = `<div class=\"flex-shrink-0\">${imgHTML}</div>${title}`;
                         btn.addEventListener('click', () => {
                             const ab = (t.abbrev || t.abbreviation || '').toString().toLowerCase();
                             window.location.href = `/team/${ab || t.id}`;
