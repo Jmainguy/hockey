@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/Jmainguy/hockey/compare/v1.4.0...v1.4.1) (2025-12-13)
+
+
+### Bug Fixes
+
+* optmize headers / menu on mobile ([ab7dfcb](https://github.com/Jmainguy/hockey/commit/ab7dfcb33e899044b66a3fb68cc02db90b26664f))
+
 ## [1.4.0](https://github.com/Jmainguy/hockey/compare/v1.3.2...v1.4.0) (2025-12-13)
 
 
