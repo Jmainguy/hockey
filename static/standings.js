@@ -121,7 +121,9 @@ function renderStandings() {
             case 'winpct':
                 va = a.winPct || 0; vb = b.winPct || 0; break;
             case 'ppct':
-                va = calcPointsPct(a); vb = calcPointsPct(b); break;
+                va = (a.pointPctg !== undefined && a.pointPctg !== null) ? a.pointPctg : calcPointsPct(a);
+                vb = (b.pointPctg !== undefined && b.pointPctg !== null) ? b.pointPctg : calcPointsPct(b);
+                break;
             default:
                 va = a.record ? a.record.points : 0; vb = b.record ? b.record.points : 0;
         }
@@ -147,8 +149,7 @@ function renderStandings() {
     // Calculate games played and points percentage
     filteredTeams.forEach((team, index) => {
         const gp = team.record.wins + team.record.losses + team.record.overtimeLosses;
-        const maxPoints = gp * 2; // Maximum possible points
-        const pointsPct = maxPoints > 0 ? ((team.record.points / maxPoints) * 100).toFixed(1) : '0.0';
+        const pointsPct = (team.pointPctg !== undefined && team.pointPctg !== null) ? (Number(team.pointPctg * 100).toFixed(1) + '%') : ( (gp>0 && team.record) ? ((team.record.points / (gp*2) * 100).toFixed(1) + '%') : '0.0%');
         
         // Desktop row
         const row = document.createElement('tr');
@@ -200,9 +201,10 @@ function renderStandings() {
             left.className = 'flex items-center gap-2 min-w-0';
             // smaller logo to save vertical space; fallback shows 3-letter abbrev
             const imgHtml = logoUrl ? `<img src="${logoUrl}" alt="${team.abbrev}" class="w-8 h-8 object-contain flex-shrink-0" onerror="this.style.display='none'">` : `<div class="w-8 h-8 bg-gray-100 flex items-center justify-center rounded text-xs">${(team.abbrev||'').substring(0,3).toUpperCase()}</div>`;
-                // show abbrev instead of full name on mobile to save space
-                const abbrev = (team.abbrev || '').toUpperCase() || ((team.name||'').split(' ').slice(-1)[0] || '').toUpperCase();
-                left.innerHTML = `${imgHtml}<div class="min-w-0"><div class="font-semibold text-sm text-gray-900 truncate">${abbrev}</div><div class="text-[10px] text-gray-500 truncate">${team.division}</div></div>`;
+            // show rank then abbrev instead of full name on mobile to save space
+            const abbrev = (team.abbrev || '').toUpperCase() || ((team.name||'').split(' ').slice(-1)[0] || '').toUpperCase();
+            const rankBadge = `<span class="text-sm font-bold text-gray-700 mr-2">#${index+1}</span>`;
+            left.innerHTML = `${rankBadge}${imgHtml}<div class="min-w-0"><div class="font-semibold text-sm text-gray-900 truncate">${abbrev}</div><div class="text-[10px] text-gray-500 truncate">${team.division}</div></div>`;
             const right = document.createElement('div');
             right.className = 'text-[11px] ml-auto text-right space-y-0';
             const gf = team.goalsFor !== undefined && team.goalsFor !== null ? team.goalsFor : '-';
@@ -221,11 +223,9 @@ function renderStandings() {
             const gaHtml = (ga !== '-') ? `<span class="font-semibold text-gray-900">${ga}</span>` : `<span class="text-gray-500">-</span>`;
             const diffHtml = (diffNum !== null) ? (diffNum >= 0 ? `<span class="text-green-600 font-semibold">+${diffNum}</span>` : `<span class="text-red-600 font-semibold">${diffNum}</span>`) : `<span class="text-gray-500">-</span>`;
 
-            // Condensed single-line summary plus a More button to view details
-            const rank = index + 1;
+            // Compact: show Points, GP, and More only
             right.innerHTML = `
-                <div class="text-gray-700 font-semibold">#${rank} • ${team.record.points} pts • GP ${gp}</div>
-                <div class="text-gray-500 text-[11px] mt-1">${pointsPct} • ${winPctStr}</div>
+                <div class="text-gray-700 font-semibold">${team.record.points} pts • GP ${gp}</div>
                 <div class="ml-2 mt-1"><button class="more-btn text-xs px-2 py-1 bg-primary text-white rounded" data-team-index="${index}">More</button></div>
             `;
             card.appendChild(left);
@@ -271,6 +271,8 @@ function showDetailsModal(team, rank) {
     if (!detailsModal) createDetailsModal();
     const content = detailsModal.querySelector('#modalContent');
     const gp = team.record ? (team.record.wins + team.record.losses + team.record.overtimeLosses) : 0;
+    const maxPoints = gp * 2;
+    const pointsPct = maxPoints > 0 && team.record ? ((team.record.points / maxPoints) * 100).toFixed(1) + '%' : '-';
     const gf = team.goalsFor !== undefined && team.goalsFor !== null ? team.goalsFor : '-';
     const ga = team.goalsAgainst !== undefined && team.goalsAgainst !== null ? team.goalsAgainst : '-';
     const diffNum = (team.goalDiff !== undefined && team.goalDiff !== null) ? Number(team.goalDiff) : null;
@@ -289,6 +291,7 @@ function showDetailsModal(team, rank) {
         <div class="mt-3 grid grid-cols-2 gap-2 text-sm text-gray-700">
             <div>Points: <span class="font-semibold">${team.record ? team.record.points : '-'}</span></div>
             <div>GP: <span class="font-semibold">${gp}</span></div>
+            <div>P%: <span class="font-semibold">${pointsPct}</span></div>
             <div>W: <span class="text-green-600 font-semibold">${team.record ? team.record.wins : '-'}</span></div>
             <div>L: <span class="text-red-600 font-semibold">${team.record ? team.record.losses : '-'}</span></div>
             <div>OTL: <span class="text-yellow-600 font-semibold">${team.record ? team.record.overtimeLosses : '-'}</span></div>
