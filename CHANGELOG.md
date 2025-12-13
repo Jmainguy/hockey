@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.4](https://github.com/Jmainguy/hockey/compare/v1.5.3...v1.5.4) (2025-12-13)
+
+
+### Bug Fixes
+
+* more modal for mobile ([6342fd2](https://github.com/Jmainguy/hockey/commit/6342fd2e2b0d9d00659b867bdf70f73e14901e8d))
+
 ## [1.5.3](https://github.com/Jmainguy/hockey/compare/v1.5.2...v1.5.3) (2025-12-13)
 
 
