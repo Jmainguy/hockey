@@ -19,6 +19,13 @@ type Team struct {
 		OvertimeLosses int `json:"overtimeLosses"`
 		Points         int `json:"points"`
 	} `json:"record"`
+	GamesPlayed  int     `json:"gamesPlayed,omitempty"`
+	GoalsFor     int     `json:"goalsFor,omitempty"`
+	GoalsAgainst int     `json:"goalsAgainst,omitempty"`
+	GoalDiff     int     `json:"goalDiff,omitempty"`
+	LastTen      string  `json:"lastTen,omitempty"`
+	Streak       string  `json:"streak,omitempty"`
+	WinPct       float64 `json:"winPct,omitempty"`
 }
 
 // TeamDetails contains detailed team information

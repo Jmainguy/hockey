@@ -115,12 +115,26 @@ func GetAllTeams() (*TeamsResponse, error) {
 			TeamName struct {
 				Default string `json:"default"`
 			} `json:"teamName"`
-			ConferenceName string `json:"conferenceName"`
-			DivisionName   string `json:"divisionName"`
-			Wins           int    `json:"wins"`
-			Losses         int    `json:"losses"`
-			OtLosses       int    `json:"otLosses"`
-			Points         int    `json:"points"`
+			ConferenceName   string  `json:"conferenceName"`
+			DivisionName     string  `json:"divisionName"`
+			Wins             int     `json:"wins"`
+			Losses           int     `json:"losses"`
+			OtLosses         int     `json:"otLosses"`
+			Points           int     `json:"points"`
+			GamesPlayed      int     `json:"gamesPlayed"`
+			GoalFor          int     `json:"goalFor"`
+			GoalAgainst      int     `json:"goalAgainst"`
+			GoalDifferential int     `json:"goalDifferential"`
+			L10Wins          int     `json:"l10Wins"`
+			L10Losses        int     `json:"l10Losses"`
+			L10OtLosses      int     `json:"l10OtLosses"`
+			StreakCode       string  `json:"streakCode"`
+			StreakCount      int     `json:"streakCount"`
+			WinPctg          float64 `json:"winPctg"`
+			RecordSummary    struct {
+				LastTen string `json:"lastTen"`
+				Streak  string `json:"streak"`
+			} `json:"recordSummary"`
 		} `json:"standings"`
 	}
 
@@ -134,6 +148,22 @@ func GetAllTeams() (*TeamsResponse, error) {
 		teamID := 0
 		if id, ok := abbrevToTeamID[abbrev]; ok {
 			teamID = id
+		}
+		gd := standing.GoalDifferential
+		if gd == 0 {
+			gd = standing.GoalFor - standing.GoalAgainst
+		}
+		lastTen := ""
+		if standing.L10Wins != 0 || standing.L10Losses != 0 || standing.L10OtLosses != 0 {
+			lastTen = fmt.Sprintf("%d-%d-%d", standing.L10Wins, standing.L10Losses, standing.L10OtLosses)
+		} else if standing.RecordSummary.LastTen != "" {
+			lastTen = standing.RecordSummary.LastTen
+		}
+		streak := ""
+		if standing.StreakCode != "" && standing.StreakCount != 0 {
+			streak = fmt.Sprintf("%s%d", strings.ToUpper(standing.StreakCode), standing.StreakCount)
+		} else if standing.RecordSummary.Streak != "" {
+			streak = standing.RecordSummary.Streak
 		}
 		teams = append(teams, Team{
 			ID:         teamID,
@@ -153,6 +183,13 @@ func GetAllTeams() (*TeamsResponse, error) {
 				OvertimeLosses: standing.OtLosses,
 				Points:         standing.Points,
 			},
+			GamesPlayed:  standing.GamesPlayed,
+			GoalsFor:     standing.GoalFor,
+			GoalsAgainst: standing.GoalAgainst,
+			GoalDiff:     gd,
+			LastTen:      lastTen,
+			Streak:       streak,
+			WinPct:       standing.WinPctg,
 		})
 	}
 
@@ -218,13 +255,26 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 			TeamCommonName struct {
 				Default string `json:"default"`
 			} `json:"teamCommonName"`
-			DivisionName   string `json:"divisionName"`
-			ConferenceName string `json:"conferenceName"`
-			Wins           int    `json:"wins"`
-			Losses         int    `json:"losses"`
-			OtLosses       int    `json:"otLosses"`
-			GamesPlayed    int    `json:"gamesPlayed"`
-			Points         int    `json:"points"`
+			DivisionName     string  `json:"divisionName"`
+			ConferenceName   string  `json:"conferenceName"`
+			Wins             int     `json:"wins"`
+			Losses           int     `json:"losses"`
+			OtLosses         int     `json:"otLosses"`
+			GamesPlayed      int     `json:"gamesPlayed"`
+			Points           int     `json:"points"`
+			GoalFor          int     `json:"goalFor"`
+			GoalAgainst      int     `json:"goalAgainst"`
+			GoalDifferential int     `json:"goalDifferential"`
+			L10Wins          int     `json:"l10Wins"`
+			L10Losses        int     `json:"l10Losses"`
+			L10OtLosses      int     `json:"l10OtLosses"`
+			StreakCode       string  `json:"streakCode"`
+			StreakCount      int     `json:"streakCount"`
+			WinPctg          float64 `json:"winPctg"`
+			RecordSummary    struct {
+				LastTen string `json:"lastTen"`
+				Streak  string `json:"streak"`
+			} `json:"recordSummary"`
 		} `json:"standings"`
 	}
 
@@ -246,6 +296,20 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 			team.LocationName = standing.TeamName.Default
 			team.Division.Name = standing.DivisionName
 			team.Conference.Name = standing.ConferenceName
+			// Compute diff and extras
+			gd := standing.GoalDifferential
+			if gd == 0 {
+				gd = standing.GoalFor - standing.GoalAgainst
+			}
+			lastTen := ""
+			if standing.L10Wins != 0 || standing.L10Losses != 0 || standing.L10OtLosses != 0 {
+				lastTen = fmt.Sprintf("%d-%d-%d", standing.L10Wins, standing.L10Losses, standing.L10OtLosses)
+			}
+			streak := ""
+			if standing.StreakCode != "" && standing.StreakCount != 0 {
+				streak = fmt.Sprintf("%s%d", strings.ToUpper(standing.StreakCode), standing.StreakCount)
+			}
+
 			team.Record = []struct {
 				Type           string `json:"type"`
 				Wins           int    `json:"wins"`
@@ -263,6 +327,16 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 					Points:         standing.Points,
 				},
 			}
+			// Attach the extra fields to TeamDetails struct if present via heuristics
+			team.Stats = []interface{}{map[string]interface{}{
+				"gamesPlayed":  standing.GamesPlayed,
+				"goalsFor":     standing.GoalFor,
+				"goalsAgainst": standing.GoalAgainst,
+				"goalDiff":     gd,
+				"lastTen":      lastTen,
+				"streak":       streak,
+				"winPct":       standing.WinPctg,
+			}}
 			break
 		}
 	}
