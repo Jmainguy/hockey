@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0](https://github.com/Jmainguy/hockey/compare/v1.3.2...v1.4.0) (2025-12-13)
+
+
+### Features
+
+* add player bios ([1c000fa](https://github.com/Jmainguy/hockey/commit/1c000fa2cf979d8ca14ed69d1f2b05068dfb569f))
+* team news / transaction pages, new headers ([de759d6](https://github.com/Jmainguy/hockey/commit/de759d60f9bf4f2a50a7b107c76806dcbd3ac342))
+
 ## [1.3.2](https://github.com/Jmainguy/hockey/compare/v1.3.1...v1.3.2) (2025-12-05)
 
 
