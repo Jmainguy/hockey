@@ -107,6 +107,43 @@ async function loadTeams() {
                     }
                 });
             }
+
+            // Mobile team picker wiring
+            const mobileBtn = document.getElementById('mobileTeamPickerBtn');
+            const mobileModal = document.getElementById('mobileTeamPicker');
+            const mobileClose = document.getElementById('mobileTeamPickerClose');
+            const mobileFilter = document.getElementById('mobileTeamFilter');
+            const mobileList = document.getElementById('mobileTeamList');
+
+            if (mobileBtn && mobileModal && mobileClose && mobileFilter && mobileList) {
+                // populate list
+                function renderMobileList(filter) {
+                    mobileList.innerHTML = '';
+                    const teams = data.teams.slice().sort((a,b)=> (a.name||'').localeCompare(b.name||''));
+                    teams.filter(t => !filter || t.name.toLowerCase().includes(filter.toLowerCase()))
+                         .forEach(t => {
+                        const btn = document.createElement('button');
+                        btn.className = 'p-3 bg-white rounded-lg shadow text-left flex items-center gap-3';
+                        const abbr = (t.abbrev||t.abbreviation||'').toString().toUpperCase();
+                        btn.innerHTML = `<div class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded">${abbr.slice(0,3)}</div><div class="flex-1">${t.name}</div>`;
+                        btn.addEventListener('click', () => {
+                            const ab = (t.abbrev || t.abbreviation || '').toString().toLowerCase();
+                            window.location.href = `/team/${ab || t.id}`;
+                        });
+                        mobileList.appendChild(btn);
+                    });
+                }
+
+                mobileBtn.addEventListener('click', () => {
+                    renderMobileList('');
+                    mobileModal.classList.remove('hidden');
+                    mobileFilter.value = '';
+                    mobileFilter.focus();
+                });
+
+                mobileClose.addEventListener('click', () => mobileModal.classList.add('hidden'));
+                mobileFilter.addEventListener('input', (e) => renderMobileList(e.target.value));
+            }
         } else {
             teamsGrid.innerHTML = '<p>No teams found</p>';
         }
