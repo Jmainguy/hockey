@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.4](https://github.com/Jmainguy/hockey/compare/v1.4.3...v1.4.4) (2025-12-13)
+
+
+### Bug Fixes
+
+* mobile optmization for standings / player pages ([378a2de](https://github.com/Jmainguy/hockey/commit/378a2de60573349b22d4f91ab07c91af46f9dfe9))
+
 ## [1.4.3](https://github.com/Jmainguy/hockey/compare/v1.4.2...v1.4.3) (2025-12-13)
 
 
