@@ -228,20 +228,8 @@ func handleAPITeamTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 	teamTransactionsCache.RUnlock()
 
-	// We'll request stories tagged as transactions for the given season.
-	// Determine season tag (e.g., "2025-26") from current date unless provided by query param.
-	seasonTag := r.URL.Query().Get("season")
-	if seasonTag == "" {
-		now := time.Now()
-		year := now.Year()
-		if now.Month() < 7 { // Jan-Jun -> season is previousYear-currentYear
-			seasonTag = fmt.Sprintf("%d-%02d", year-1, year%100)
-		} else {
-			seasonTag = fmt.Sprintf("%d-%02d", year, (year+1)%100)
-		}
-	}
-
-	pageSize := 100
+	// We'll request stories tagged as transactions and paginate until we have enough items.
+	pageSize := 30
 	maxPages := 10
 	skip := 0
 	allItems := []struct {
@@ -257,7 +245,8 @@ func handleAPITeamTransactions(w http.ResponseWriter, r *http.Request) {
 	}{}
 
 	for page := 0; page < maxPages; page++ {
-		apiUrl := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-us/stories?tags.slug=teamid-%s&tags.slug=transactions&tags.slug=%s&$limit=%d&$skip=%d", teamId, seasonTag, pageSize, skip)
+		// Do not restrict by season tag; fetch transactions broadly and paginate until we have enough
+		apiUrl := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-us/stories?tags.slug=teamid-%s&tags.slug=transactions&$limit=%d&$skip=%d", teamId, pageSize, skip)
 		resp, err := http.Get(apiUrl)
 		if err != nil {
 			http.Error(w, "Failed to fetch transactions", http.StatusBadGateway)
@@ -308,6 +297,10 @@ func handleAPITeamTransactions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		allItems = append(allItems, pageResp.Items...)
+		// Stop early if we've collected enough items
+		if len(allItems) >= 30 {
+			break
+		}
 		if len(pageResp.Items) < pageSize {
 			break
 		}
@@ -357,6 +350,11 @@ func handleAPITeamTransactions(w http.ResponseWriter, r *http.Request) {
 			}
 			return txs[i].DateParsed.After(txs[j].DateParsed)
 		})
+	}
+
+	// Limit to the most recent 30 transactions
+	if len(txs) > 30 {
+		txs = txs[:30]
 	}
 
 	type TransactionsResponse struct {
