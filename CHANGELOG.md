@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.2](https://github.com/Jmainguy/hockey/compare/v1.4.1...v1.4.2) (2025-12-13)
+
+
+### Bug Fixes
+
+* detroit and other teams dont always tag transactions ([bd5b728](https://github.com/Jmainguy/hockey/commit/bd5b72856e8252591f597d105723477db2f9db27))
+* optmize team search on mobile ([a5d6f49](https://github.com/Jmainguy/hockey/commit/a5d6f49ce3b20557648236de84da1d60dce359e3))
+
 ## [1.4.1](https://github.com/Jmainguy/hockey/compare/v1.4.0...v1.4.1) (2025-12-13)
 
 
