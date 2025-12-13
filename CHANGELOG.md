@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.3](https://github.com/Jmainguy/hockey/compare/v1.5.2...v1.5.3) (2025-12-13)
+
+
+### Bug Fixes
+
+* less info per team on standings for mobile ([38419b7](https://github.com/Jmainguy/hockey/commit/38419b7c4416d35d4ad7a4e32f1c9ad5b97377e1))
+
 ## [1.5.2](https://github.com/Jmainguy/hockey/compare/v1.5.1...v1.5.2) (2025-12-13)
 
 
