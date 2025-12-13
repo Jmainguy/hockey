@@ -43,6 +43,7 @@ func main() {
 	router.HandleFunc("/api/roster/{teamId}", handleAPIRoster).Methods("GET")
 	router.HandleFunc("/api/prospects/{teamAbbrev}", handleAPIProspects).Methods("GET")
 	router.HandleFunc("/api/player/{playerId}", handleAPIPlayer).Methods("GET")
+	router.HandleFunc("/api/player-bio/{playerId}", handleAPIPlayerBio).Methods("GET")
 	router.HandleFunc("/api/schedule/{date}", handleAPISchedule).Methods("GET")
 	router.HandleFunc("/api/team-schedule/{teamId}", handleAPITeamSchedule).Methods("GET")
 	router.HandleFunc("/api/gamecenter/{gameId}/landing", handleAPIGameLanding).Methods("GET")
@@ -244,6 +245,36 @@ func handleAPIPlayer(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(enrichedData); err != nil {
 		log.Printf("Error writing enriched data: %v", err)
+	}
+}
+
+func handleAPIPlayerBio(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	playerId := vars["playerId"]
+
+	// Construct biography API URL
+	url := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-us/players?tags.slug=playerid-%s", playerId)
+
+	body, err := fetchURL(url)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer func() {
+		if err := body.Close(); err != nil {
+			log.Printf("Error closing response body: %v", err)
+		}
+	}()
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(data); err != nil {
+		log.Printf("Error writing bio data: %v", err)
 	}
 }
 

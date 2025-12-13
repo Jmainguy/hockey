@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Player Details - NHL Fan Hub</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -37,6 +38,7 @@
         <!-- Sticky navigation -->
         <nav id="playerStickyNav" aria-label="Player sections" class="hidden sticky top-0 z-40 bg-white/90 backdrop-blur-md rounded-xl shadow-md p-2 mb-6 flex gap-2">
             <button data-target="overview" class="flex-1 px-4 py-2 rounded-lg font-semibold transition bg-primary text-white">Overview</button>
+            <button data-target="biography" class="flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Biography</button>
             <button data-target="seasons" class="flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Seasons</button>
             <button data-target="awards" class="flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Awards</button>
         </nav>
@@ -85,6 +87,12 @@
                             <div>
                                 <h3 class="text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">Profile <span class="h-1 w-12 bg-accent rounded-full"></span></h3>
                                 <div id="playerMeta" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                            </div>
+                        </section>
+                        <section id="tab-biography" data-tab="biography" class="tab-panel hidden" aria-labelledby="tabBtnBiography">
+                            <h3 id="tabBtnBiography" class="sr-only">Biography</h3>
+                            <div id="playerBiography">
+                                <div class="text-center text-gray-500 py-6">Loading biography...</div>
                             </div>
                         </section>
                         <section id="tab-seasons" data-tab="seasons" class="tab-panel hidden" aria-labelledby="tabBtnSeasons">

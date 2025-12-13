@@ -33,9 +33,24 @@ function applyTeamTheme(abbrev) {
     const imageLayer = actionShot ? `, url(${actionShot})` : '';
     hero.style.background = gradient + imageLayer;
     hero.style.backgroundSize = 'cover';
-    hero.style.backgroundPosition = 'center';
+    // Default to top for desktop, center for mobile (override with media query)
+    hero.style.backgroundPosition = 'top';
     if (map) hero.style.borderColor = map.primary + '40';
-    
+
+    // Responsive override: center on mobile
+    const styleId = 'player-hero-bgpos';
+    let styleTag = document.getElementById(styleId);
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = styleId;
+        document.head.appendChild(styleTag);
+    }
+    styleTag.textContent = `
+        @media (max-width: 640px) {
+            #playerHero { background-position: center !important; }
+        }
+    `;
+
     // Always show overlay for text visibility (white text on all backgrounds)
     if (overlay) {
         overlay.style.opacity = '1';
@@ -91,6 +106,9 @@ async function loadPlayer() {
         const resp = await fetch(`/api/player/${id}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
+
+        // Load biography in the background
+        loadPlayerBio(id);
 
         // Helper to safely extract string values from nested structures
         const resolve = (val) => {
@@ -738,6 +756,98 @@ async function loadPlayer() {
         errorDiv.classList.remove('hidden');
         errorDiv.textContent = 'Failed to load player data.';
     }
+}
+
+async function loadPlayerBio(playerId) {
+    const bioDiv = document.getElementById('playerBiography');
+    if (!bioDiv) return;
+
+    try {
+        const resp = await fetch(`/api/player-bio/${playerId}`);
+        if (!resp.ok) {
+            bioDiv.innerHTML = '<div class="text-center text-gray-500 py-6">No biography available</div>';
+            return;
+        }
+        
+        const data = await resp.json();
+        
+        if (!data.items || data.items.length === 0 || !data.items[0].fields.biography) {
+            bioDiv.innerHTML = '<div class="text-center text-gray-500 py-6">No biography available</div>';
+            return;
+        }
+
+        const biography = data.items[0].fields.biography;
+        
+        // Format the biography: handle \n line breaks and **bold** markdown
+        const formattedBio = formatBiography(biography);
+        
+        bioDiv.innerHTML = `
+            <div class="prose prose-lg max-w-none">
+                <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    Biography 
+                    <span class="h-1 w-12 bg-accent rounded-full"></span>
+                </h3>
+                <div class="text-gray-700 leading-relaxed space-y-4">
+                    ${formattedBio}
+                </div>
+            </div>
+        `;
+    } catch (e) {
+        bioDiv.innerHTML = '<div class="text-center text-gray-500 py-6">Failed to load biography</div>';
+    }
+}
+
+function formatBiography(bio) {
+    if (!bio) return '';
+        // Split by double newlines to identify major sections
+        return bio.split(/\n\s*\n/).map(section => {
+            const trimmed = section.trim();
+            const lines = trimmed.split('\n').map(line => line.trim()).filter(Boolean);
+            // Detect explicit NOTES & TRANSACTIONS section (title may have markdown or asterisks)
+            const notesIdx = lines.findIndex(line => line.replace(/\*/g, '').toUpperCase().includes('NOTES & TRANSACTIONS'));
+            if (notesIdx !== -1) {
+                // Use the first line containing NOTES & TRANSACTIONS as the title, strip markdown bold and asterisks
+                let title = lines[notesIdx].replace(/\*+/g, '').replace(/_/g, '').trim();
+                // Normalize title capitalization
+                title = title.replace(/\s+/g, ' ').toUpperCase();
+                if (title !== 'NOTES & TRANSACTIONS') title = 'NOTES & TRANSACTIONS';
+                // All lines after the title that are bullets
+                let items = lines.slice(notesIdx + 1).filter(line => /^[-*]\s*/.test(line)).map(line => line.replace(/^[-*]\s*/, '').trim());
+                // Remove any item that is just the title
+                items = items.filter(item => item.replace(/\*/g, '').trim().toUpperCase() !== 'NOTES & TRANSACTIONS');
+                if (!items.length) return '';
+                return `
+                    <div class="mt-8 border-t-2 border-gray-200 pt-6">
+                        <h4 class="text-lg font-bold text-gray-800 mb-3">${title}</h4>
+                        <ul class="list-disc list-inside space-y-2 text-sm ml-4">
+                            ${items.map(item => `<li class="text-gray-600">${item}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            // If the section is only bullet points, treat as NOTES & TRANSACTIONS
+            const isBullet = line => /^[-*]\s*/.test(line);
+            if (lines.length && lines.every(isBullet)) {
+                let items = lines.map(line => line.replace(/^[-*]\s*/, '').trim());
+                items = items.filter(item => item.replace(/\*/g, '').trim().toUpperCase() !== 'NOTES & TRANSACTIONS');
+                if (!items.length) return '';
+                return `
+                    <div class="mt-8 border-t-2 border-gray-200 pt-6">
+                        <h4 class="text-lg font-bold text-gray-800 mb-3">NOTES & TRANSACTIONS</h4>
+                        <ul class="list-disc list-inside space-y-2 text-sm ml-4">
+                            ${items.map(item => `<li class="text-gray-600">${item}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            // For normal paragraphs, preserve double line breaks as <br><br> and single as <br>
+            // Split by double newlines for paragraphs, then join with <br><br>
+            const paraHtml = trimmed
+                .split(/\n{2,}/)
+                .map(paragraph => paragraph.split('\n').map(line => line.trim()).filter(Boolean).join('<br>'))
+                .join('<br><br>');
+            return `<p>${paraHtml}</p>`;
+        }).join('');
 }
 
 window.addEventListener('DOMContentLoaded', loadPlayer);
