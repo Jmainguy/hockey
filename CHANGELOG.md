@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.3](https://github.com/Jmainguy/hockey/compare/v1.4.2...v1.4.3) (2025-12-13)
+
+
+### Bug Fixes
+
+* optimize mobile team selector ([09a8b70](https://github.com/Jmainguy/hockey/commit/09a8b70181e0e203ca3bb70cf3b08d26a2813553))
+
 ## [1.4.2](https://github.com/Jmainguy/hockey/compare/v1.4.1...v1.4.2) (2025-12-13)
 
 
