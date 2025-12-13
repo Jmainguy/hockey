@@ -2,6 +2,7 @@
 let allTeams = [];
 let currentFilter = 'league';
 let sortState = { key: 'points', dir: 'desc' }; // default sort
+let detailsModal = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     loadStandings();
@@ -199,7 +200,9 @@ function renderStandings() {
             left.className = 'flex items-center gap-2 min-w-0';
             // smaller logo to save vertical space; fallback shows 3-letter abbrev
             const imgHtml = logoUrl ? `<img src="${logoUrl}" alt="${team.abbrev}" class="w-8 h-8 object-contain flex-shrink-0" onerror="this.style.display='none'">` : `<div class="w-8 h-8 bg-gray-100 flex items-center justify-center rounded text-xs">${(team.abbrev||'').substring(0,3).toUpperCase()}</div>`;
-            left.innerHTML = `${imgHtml}<div class="min-w-0"><div class="font-semibold text-sm text-gray-900 truncate">${team.name}</div><div class="text-[10px] text-gray-500 truncate">${team.division}</div></div>`;
+                // show abbrev instead of full name on mobile to save space
+                const abbrev = (team.abbrev || '').toUpperCase() || ((team.name||'').split(' ').slice(-1)[0] || '').toUpperCase();
+                left.innerHTML = `${imgHtml}<div class="min-w-0"><div class="font-semibold text-sm text-gray-900 truncate">${abbrev}</div><div class="text-[10px] text-gray-500 truncate">${team.division}</div></div>`;
             const right = document.createElement('div');
             right.className = 'text-[11px] ml-auto text-right space-y-0';
             const gf = team.goalsFor !== undefined && team.goalsFor !== null ? team.goalsFor : '-';
@@ -218,11 +221,12 @@ function renderStandings() {
             const gaHtml = (ga !== '-') ? `<span class="font-semibold text-gray-900">${ga}</span>` : `<span class="text-gray-500">-</span>`;
             const diffHtml = (diffNum !== null) ? (diffNum >= 0 ? `<span class="text-green-600 font-semibold">+${diffNum}</span>` : `<span class="text-red-600 font-semibold">${diffNum}</span>`) : `<span class="text-gray-500">-</span>`;
 
-            // Condensed two-line layout for high density: top line summary, bottom line compact details
+            // Condensed single-line summary plus a More button to view details
+            const rank = index + 1;
             right.innerHTML = `
-                <div class="text-gray-700 font-semibold">${team.record.points} pts • GP ${gp} • ${pointsPct}</div>
-                <div class="text-gray-500">W ${wHtml} • L ${lHtml} • OTL ${oHtml} • Diff ${diffHtml}</div>
-                <div class="text-gray-500 text-[11px]">GF ${gfHtml} • GA ${gaHtml} • L10 ${l10} • Strk ${strk} • Win ${winPctStr}</div>
+                <div class="text-gray-700 font-semibold">#${rank} • ${team.record.points} pts • GP ${gp}</div>
+                <div class="text-gray-500 text-[11px] mt-1">${pointsPct} • ${winPctStr}</div>
+                <div class="ml-2 mt-1"><button class="more-btn text-xs px-2 py-1 bg-primary text-white rounded" data-team-index="${index}">More</button></div>
             `;
             card.appendChild(left);
             card.appendChild(right);
@@ -231,6 +235,80 @@ function renderStandings() {
         }
     });
 
+    // Ensure a single details modal exists
+    if (!detailsModal) createDetailsModal();
+
+    // Attach handlers for More buttons
+    document.querySelectorAll('.more-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const idx = Number(btn.getAttribute('data-team-index')) || 0;
+            const team = filteredTeams[idx];
+            showDetailsModal(team, idx+1);
+        });
+    });
+
+
+function createDetailsModal() {
+    detailsModal = document.createElement('div');
+    detailsModal.id = 'teamDetailsModal';
+    detailsModal.className = 'fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4';
+    detailsModal.innerHTML = `
+        <div class="bg-white rounded-lg max-w-md w-full p-4 shadow-lg">
+            <div id="modalClose" class="text-right"><button class="text-gray-500">Close</button></div>
+            <div id="modalContent" class="text-sm text-gray-800 mt-2"></div>
+        </div>
+    `;
+    document.body.appendChild(detailsModal);
+    // close handlers
+    detailsModal.addEventListener('click', (ev) => {
+        if (ev.target === detailsModal) hideDetailsModal();
+    });
+    detailsModal.querySelector('#modalClose button').addEventListener('click', hideDetailsModal);
+}
+
+function showDetailsModal(team, rank) {
+    if (!detailsModal) createDetailsModal();
+    const content = detailsModal.querySelector('#modalContent');
+    const gp = team.record ? (team.record.wins + team.record.losses + team.record.overtimeLosses) : 0;
+    const gf = team.goalsFor !== undefined && team.goalsFor !== null ? team.goalsFor : '-';
+    const ga = team.goalsAgainst !== undefined && team.goalsAgainst !== null ? team.goalsAgainst : '-';
+    const diffNum = (team.goalDiff !== undefined && team.goalDiff !== null) ? Number(team.goalDiff) : null;
+    const diffHtml = (diffNum !== null) ? (diffNum >= 0 ? `<span class="text-green-600 font-semibold">+${diffNum}</span>` : `<span class="text-red-600 font-semibold">${diffNum}</span>`) : `-`;
+    const l10 = team.lastTen || '-';
+    const strk = team.streak || '-';
+    const winPctStr = (team.winPct !== undefined && team.winPct !== null) ? (Number(team.winPct)*100).toFixed(1)+'%' : '-';
+
+    content.innerHTML = `
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-lg font-bold">#${rank} ${team.abbrev ? team.abbrev.toUpperCase() : team.name}</div>
+                <div class="text-sm text-gray-500">${team.name} — ${team.division}</div>
+            </div>
+        </div>
+        <div class="mt-3 grid grid-cols-2 gap-2 text-sm text-gray-700">
+            <div>Points: <span class="font-semibold">${team.record ? team.record.points : '-'}</span></div>
+            <div>GP: <span class="font-semibold">${gp}</span></div>
+            <div>W: <span class="text-green-600 font-semibold">${team.record ? team.record.wins : '-'}</span></div>
+            <div>L: <span class="text-red-600 font-semibold">${team.record ? team.record.losses : '-'}</span></div>
+            <div>OTL: <span class="text-yellow-600 font-semibold">${team.record ? team.record.overtimeLosses : '-'}</span></div>
+            <div>Win%: <span class="font-semibold">${winPctStr}</span></div>
+            <div>GF: <span class="font-semibold">${gf}</span></div>
+            <div>GA: <span class="font-semibold">${ga}</span></div>
+            <div>Diff: <span class="font-semibold">${diffHtml}</span></div>
+            <div>L10: <span class="font-semibold">${l10}</span></div>
+            <div>Streak: <span class="font-semibold">${strk}</span></div>
+        </div>
+    `;
+    detailsModal.classList.remove('hidden');
+    detailsModal.classList.add('flex');
+}
+
+function hideDetailsModal() {
+    if (!detailsModal) return;
+    detailsModal.classList.add('hidden');
+    detailsModal.classList.remove('flex');
+}
     // Attach click handlers to headers for sorting (desktop only)
     const table = document.querySelector('.min-w-full');
     if (table) {
