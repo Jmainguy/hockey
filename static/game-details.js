@@ -4,31 +4,41 @@ function displayGameDetailsHTML(data) {
     const awayTeam = data.awayTeam;
     const homeTeam = data.homeTeam;
     const isFutureGame = data.gameState === 'FUT' || data.gameState === 'PRE';
-    
+
+    // prettier game summary header: left team / score center / right team
+    let statusText = 'Final';
+    if (data.gameState === 'LIVE') statusText = 'Live';
+    else if (data.gameState === 'PRE') statusText = 'Pregame';
+    else if (data.gameState === 'FUT') statusText = 'Scheduled';
+    const periodInfo = data.periodDescriptor ? `${data.periodDescriptor.periodType} ${data.periodDescriptor.number || ''}` : '';
+    // status badge color
+    const statusClass = data.gameState === 'LIVE' ? 'bg-red-100 text-red-700' : (data.gameState === 'FUT' || data.gameState === 'PRE') ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-700';
     let detailsHTML = `
-        <!-- Game Summary -->
-        <div class="grid grid-cols-3 gap-4 items-center mb-6 pb-6 border-b">
-            <div class="text-center">
-                <img src="https://assets.nhle.com/logos/nhl/svg/${homeTeam.abbrev}_light.svg" 
-                     alt="${homeTeam.abbrev}" 
-                     class="w-24 h-24 mx-auto mb-2">
-                <div class="font-bold text-lg">${homeTeam.placeName?.default || homeTeam.abbrev}</div>
-                <div class="text-sm text-gray-600 mt-1">${isFutureGame ? (homeTeam.record || 'Record TBD') : 'SOG: ' + (homeTeam.sog || 0)}</div>
+        <div class="flex flex-col md:flex-row items-center md:items-stretch gap-4 mb-6 pb-6 border-b">
+            <div class="flex-1 flex flex-col items-center md:items-start md:pl-4">
+                <a href="/team/${homeTeam.abbrev}" class="inline-block"><img src="https://assets.nhle.com/logos/nhl/svg/${homeTeam.abbrev}_light.svg" alt="${homeTeam.abbrev}" class="w-14 h-14 mb-2"></a>
+                <div class="text-lg font-bold text-gray-800">${homeTeam.placeName?.default || homeTeam.abbrev}</div>
+                <div class="text-xs text-gray-500 mt-1">${isFutureGame ? (homeTeam.record || 'Record TBD') : 'SOG: ' + (homeTeam.sog || 0)}</div>
             </div>
-            <div class="text-center">
-                ${isFutureGame ? 
-                    `<div class="text-5xl font-bold text-gray-800">VS</div>` :
-                    `<div class="text-5xl font-bold text-gray-800">${homeTeam.score || 0} - ${awayTeam.score || 0}</div>`
-                }
-                <div class="text-sm text-gray-600 mt-2">${data.gameState === 'FUT' ? 'Scheduled' : data.gameState === 'LIVE' ? 'Live' : 'Final'}</div>
-                ${data.periodDescriptor ? `<div class="text-xs text-gray-500 mt-1">${data.periodDescriptor.periodType} - Period ${data.periodDescriptor.number}</div>` : ''}
+
+            <div class="w-full md:w-auto flex flex-col items-center justify-center">
+                <div class="inline-flex items-center gap-4">
+                    <div class="text-5xl font-extrabold text-gray-900">${homeTeam.score || 0}</div>
+                    <div class="text-2xl font-bold text-gray-400">-</div>
+                    <div class="text-5xl font-extrabold text-gray-900">${awayTeam.score || 0}</div>
+                </div>
+                <div class="mt-2 inline-flex items-center gap-3">
+                    <span class="text-sm font-semibold ${statusClass} px-3 py-1 rounded-full">${statusText}</span>
+                    ${data.clockText ? `<span class="text-sm text-gray-500">• ${data.clockText}</span>` : ''}
+                    ${periodInfo ? `<span class="text-xs text-gray-400 px-2 py-0.5 bg-gray-100 rounded">${periodInfo}</span>` : ''}
+                </div>
+                
             </div>
-            <div class="text-center">
-                <img src="https://assets.nhle.com/logos/nhl/svg/${awayTeam.abbrev}_light.svg" 
-                     alt="${awayTeam.abbrev}" 
-                     class="w-24 h-24 mx-auto mb-2">
-                <div class="font-bold text-lg">${awayTeam.placeName?.default || awayTeam.abbrev}</div>
-                <div class="text-sm text-gray-600 mt-1">${isFutureGame ? (awayTeam.record || 'Record TBD') : 'SOG: ' + (awayTeam.sog || 0)}</div>
+
+            <div class="flex-1 flex flex-col items-center md:items-end md:pr-4">
+                <a href="/team/${awayTeam.abbrev}" class="inline-block"><img src="https://assets.nhle.com/logos/nhl/svg/${awayTeam.abbrev}_light.svg" alt="${awayTeam.abbrev}" class="w-14 h-14 mb-2"></a>
+                <div class="text-lg font-bold text-gray-800">${awayTeam.placeName?.default || awayTeam.abbrev}</div>
+                <div class="text-xs text-gray-500 mt-1">${isFutureGame ? (awayTeam.record || 'Record TBD') : 'SOG: ' + (awayTeam.sog || 0)}</div>
             </div>
         </div>
     `;
@@ -129,8 +139,8 @@ function displayGameDetailsHTML(data) {
                                 <img src="https://assets.nhle.com/logos/nhl/svg/${homeTeam.abbrev}_light.svg" 
                                      alt="${homeTeam.abbrev}" 
                                      class="w-5 h-5 flex-shrink-0">
-                                <img src="${homeLeader.headshot}" alt="${homeLeader.name?.default}" 
-                                     class="w-10 h-10 rounded-full object-cover border-2 border-gray-200 flex-shrink-0">
+                                  <a href="/player/${homeLeader.playerId || homeLeader.id || ''}" class="inline-block"><img src="${homeLeader.headshot}" alt="${homeLeader.name?.default}" 
+                                      class="w-10 h-10 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"></a>
                                 <div class="flex-1 min-w-0">
                                     <div class="font-bold text-sm truncate">${homeLeader.name?.default || ''}</div>
                                     <div class="text-xs text-gray-600">#${homeLeader.sweaterNumber} ${homeLeader.positionCode || ''}</div>
@@ -143,8 +153,8 @@ function displayGameDetailsHTML(data) {
                                 <img src="https://assets.nhle.com/logos/nhl/svg/${awayTeam.abbrev}_light.svg" 
                                      alt="${awayTeam.abbrev}" 
                                      class="w-5 h-5 flex-shrink-0">
-                                <img src="${awayLeader.headshot}" alt="${awayLeader.name?.default}" 
-                                     class="w-10 h-10 rounded-full object-cover border-2 border-gray-200 flex-shrink-0">
+                                  <a href="/player/${awayLeader.playerId || awayLeader.id || ''}" class="inline-block"><img src="${awayLeader.headshot}" alt="${awayLeader.name?.default}" 
+                                      class="w-10 h-10 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"></a>
                                 <div class="flex-1 min-w-0">
                                     <div class="font-bold text-sm truncate">${awayLeader.name?.default || ''}</div>
                                     <div class="text-xs text-gray-600">#${awayLeader.sweaterNumber} ${awayLeader.positionCode || ''}</div>
@@ -198,8 +208,7 @@ function displayGameDetailsHTML(data) {
                         
                         detailsHTML += `
                             <div class="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
-                                <img src="${goalie.headshot}" alt="${goalie.name?.default}" 
-                                     class="w-12 h-12 rounded-full object-cover border-2 border-gray-200">
+                                <a href="/player/${goalie.playerId || goalie.id || ''}" class="inline-block"><img src="${goalie.headshot}" alt="${goalie.name?.default}" class="w-12 h-12 rounded-full object-cover border-2 border-gray-200"></a>
                                 <div class="flex-1 min-w-0">
                                     <div class="font-bold text-sm">${goalie.name?.default || ''}</div>
                                     <div class="text-xs text-gray-600">#${goalie.sweaterNumber} - ${goalie.record || '0-0-0'}</div>
@@ -238,7 +247,7 @@ function displayGameDetailsHTML(data) {
                         
                         detailsHTML += `
                             <div class="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
-                                <img src="${goalie.headshot}" alt="${goalie.name?.default}" 
+                                  <a href="/player/${goalie.playerId || goalie.id || ''}" class="inline-block"><img src="${goalie.headshot}" alt="${goalie.name?.default}" 
                                      class="w-12 h-12 rounded-full object-cover border-2 border-gray-200">
                                 <div class="flex-1 min-w-0">
                                     <div class="font-bold text-sm">${goalie.name?.default || ''}</div>
@@ -285,20 +294,85 @@ function displayGameDetailsHTML(data) {
             const stats = player.position === 'G' 
                 ? `${player.savePctg ? (player.savePctg * 100).toFixed(1) + '% SV' : 'Goalie'}`
                 : `${player.goals || 0}G ${player.assists || 0}A ${player.points || 0}P`;
+            // Prefer firstName/lastName fields if present; fallback to name.default
+            const fname = (player.firstName && player.firstName.default) ? player.firstName.default : '';
+            const lname = (player.lastName && player.lastName.default) ? player.lastName.default : '';
+            const fullName = (fname || lname) ? `${fname} ${lname}`.trim() : (player.name?.default || '');
+            const playerId = player.playerId || player.id || null;
+            const teamAbbrev = (player.teamAbbrev && player.teamAbbrev.default) ? player.teamAbbrev.default : (player.teamAbbrev || '');
+            const headshot = player.headshot || '';
             
             detailsHTML += `
                 <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 flex items-center gap-3">
                     <div class="text-3xl">${starEmoji}</div>
-                    <img src="${player.headshot}" alt="${player.name?.default}" class="w-12 h-12 rounded-full object-cover">
+                    <a href="/player/${playerId || ''}" class="block flex-shrink-0">
+                      <img src="${headshot}" alt="${fullName}" class="w-12 h-12 rounded-full object-cover">
+                    </a>
                     <div class="flex-1 min-w-0">
-                        <div class="font-bold text-sm truncate">${player.name?.default || ''}</div>
-                        <div class="text-xs text-gray-600">${player.teamAbbrev} #${player.sweaterNo}</div>
+                        <div class="font-bold text-sm truncate"><a id="threeStarName-${playerId || ''}" href="/player/${playerId || ''}" class="underline">${fullName}</a></div>
+                        <div class="text-xs text-gray-600">${teamAbbrev} #${player.sweaterNo}</div>
                         <div class="text-xs text-gray-500">${stats}</div>
                     </div>
                 </div>
             `;
         });
         
+        detailsHTML += `
+                </div>
+            </div>
+        `;
+    }
+
+    // Shootout clips (if present) - construct Brightcove player links using discreteClip
+    const shootoutData = data.summary?.shootout || data.shootout || null;
+    if (shootoutData && Array.isArray(shootoutData) && shootoutData.length > 0) {
+        detailsHTML += `
+            <div class="mb-6">
+                <h4 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">🔔 Shootout Highlights</h4>
+                <div class="space-y-2">
+        `;
+
+        shootoutData.forEach(s => {
+            const clipId = s.discreteClip || s.discreteClipFr || null;
+            if (clipId) {
+                const playerUrl = `https://players.brightcove.net/6415718365001/EXtG1xJ7H_default/index.html?videoId=${clipId}`;
+                const shooter = (s.firstName && s.firstName.default ? s.firstName.default : '') + ' ' + (s.lastName && s.lastName.default ? s.lastName.default : '');
+                const team = s.teamAbbrev && s.teamAbbrev.default ? s.teamAbbrev.default : '';
+                detailsHTML += `
+                    <div class="flex items-center justify-between bg-gray-50 rounded p-3">
+                        <div class="text-sm">${shooter.trim()} • ${team} • ${s.result || ''}</div>
+                        <div><a href="${playerUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 bg-primary text-white px-3 py-1 rounded">▶ Watch SO</a></div>
+                    </div>
+                `;
+            }
+        });
+
+        detailsHTML += `
+                </div>
+            </div>
+        `;
+    }
+
+    // Also render any discreteClips attached at top-level (server enrichment)
+    const topClips = data.discreteClips || null;
+    if (topClips && Array.isArray(topClips) && topClips.length > 0) {
+        detailsHTML += `
+            <div class="mb-6">
+                <h4 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">🔔 Shootout / Extra Clips</h4>
+                <div class="space-y-2">
+        `;
+
+        topClips.forEach((cid) => {
+            if (!cid) return;
+            const playerUrl = `https://players.brightcove.net/6415718365001/EXtG1xJ7H_default/index.html?videoId=${cid}`;
+            detailsHTML += `
+                <div class="flex items-center justify-between bg-gray-50 rounded p-3">
+                    <div class="text-sm">Clip ID ${cid}</div>
+                    <div><a href="${playerUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 bg-primary text-white px-3 py-1 rounded">▶ Watch</a></div>
+                </div>
+            `;
+        });
+
         detailsHTML += `
                 </div>
             </div>
@@ -325,13 +399,30 @@ function displayGameDetailsHTML(data) {
                 
                 period.goals.forEach(goal => {
                     const teamAbbrev = goal.teamAbbrev?.default || '';
-                    const scorer = goal.name?.default || 'Unknown';
-                    const assists = goal.assists ? goal.assists.map(a => a.name?.default || '').filter(n => n).join(', ') : '';
+                    // Scorer full name: prefer firstName/lastName if provided
+                    const scorerFirst = (goal.firstName && goal.firstName.default) ? goal.firstName.default : '';
+                    const scorerLast = (goal.lastName && goal.lastName.default) ? goal.lastName.default : '';
+                    const scorerName = (scorerFirst || scorerLast) ? `${scorerFirst} ${scorerLast}`.trim() : (goal.name?.default || 'Unknown');
+                    const scorerId = goal.scorerId || goal.playerId || null;
+                    // Build assists list as HTML with links when player ids are present
+                    let assists = '';
+                    if (goal.assists && Array.isArray(goal.assists) && goal.assists.length > 0) {
+                        assists = goal.assists.map(a => {
+                            const aFirst = (a.firstName && a.firstName.default) ? a.firstName.default : '';
+                            const aLast = (a.lastName && a.lastName.default) ? a.lastName.default : '';
+                            const aName = (aFirst || aLast) ? `${aFirst} ${aLast}`.trim() : (a.name?.default || '');
+                            const aId = a.playerId || a.id || null;
+                            if (aId) return `<a href="/player/${aId}" class="underline">${aName}</a>`;
+                            return aName;
+                        }).filter(n => n).join(', ');
+                    }
                     const time = goal.timeInPeriod || '';
                     const strength = goal.strength || '';
                     const shotType = goal.shotType || '';
                     const score = `${goal.homeScore}-${goal.awayScore}`;
                     const highlightUrl = goal.highlightClipSharingUrl || '';
+                    // Only show the discrete "Watch Clip" for SO scoring period goals
+                    const discreteClipId = (period.periodDescriptor && period.periodDescriptor.periodType === 'SO') ? (goal.discreteClip || goal.discreteClipFr || null) : null;
                     const goalModifier = goal.goalModifier || '';
                     
                     let strengthBadge = '';
@@ -347,15 +438,14 @@ function displayGameDetailsHTML(data) {
                     
                     detailsHTML += `
                         <div class="flex items-start gap-3 text-sm bg-white rounded p-3">
-                            <img src="https://assets.nhle.com/logos/nhl/svg/${teamAbbrev}_light.svg" 
-                                 alt="${teamAbbrev}" 
-                                 class="w-8 h-8 flex-shrink-0">
-                            <img src="${goal.headshot}" alt="${scorer}" class="w-10 h-10 rounded-full object-cover flex-shrink-0">
+                               <a href="/team/${teamAbbrev}" class="inline-block"><img src="https://assets.nhle.com/logos/nhl/svg/${teamAbbrev}_light.svg" alt="${teamAbbrev}" class="w-8 h-8 flex-shrink-0"></a>
+                               <a href="/player/${scorerId || ''}" class="inline-block"><img src="${goal.headshot}" alt="${scorerName}" class="w-10 h-10 rounded-full object-cover flex-shrink-0"></a>
                             <div class="flex-1 min-w-0">
-                                <div class="font-bold">${scorer} (${goal.goalsToDate || 0}) ${strengthBadge}</div>
+                                <div class="font-bold"><a href="/player/${scorerId || ''}" class="underline">${scorerName}</a> (${goal.goalsToDate || 0}) ${strengthBadge}</div>
                                 ${assists ? `<div class="text-gray-600 text-xs mt-1">Assists: ${assists}</div>` : ''}
                                 <div class="text-gray-500 text-xs mt-1">${shotType ? shotType + ' shot' : ''}</div>
                                 ${highlightUrl ? `<div class="mt-2"><a href="${highlightUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs bg-primary text-white px-3 py-1 rounded hover:bg-secondary transition">🎥 Watch Highlight</a></div>` : ''}
+                                ${discreteClipId ? `<div class="mt-2"><a href="https://players.brightcove.net/6415718365001/EXtG1xJ7H_default/index.html?videoId=${discreteClipId}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs bg-primary text-white px-3 py-1 rounded hover:bg-secondary transition">▶ Watch Clip</a></div>` : ''}
                             </div>
                             <div class="text-right flex-shrink-0">
                                 <div class="font-mono text-xs text-gray-600">${time}</div>
@@ -414,7 +504,12 @@ function displayGameDetailsHTML(data) {
                     } else {
                         const player = `${penalty.committedByPlayer?.firstName?.default || ''} ${penalty.committedByPlayer?.lastName?.default || ''}`.trim();
                         const number = penalty.committedByPlayer?.sweaterNumber || '';
-                        playerDisplay = `${player} #${number}`;
+                        const pId = penalty.committedByPlayer?.playerId || penalty.committedByPlayer?.id || '';
+                        if (pId) {
+                            playerDisplay = `<a href="/player/${pId}" class="underline">${player}</a> #${number}`;
+                        } else {
+                            playerDisplay = `${player} #${number}`;
+                        }
                         penaltyDescription = `${penaltyType} (${duration} min)`;
                     }
                     
@@ -446,4 +541,80 @@ function displayGameDetailsHTML(data) {
     }
     
     return detailsHTML;
+}
+
+// Hydrate abbreviated three-stars names by fetching player details
+async function hydrateThreeStarNames() {
+    try {
+        const anchors = Array.from(document.querySelectorAll('[id^="threeStarName-"]'));
+        if (!anchors || anchors.length === 0) return;
+        for (const a of anchors) {
+            try {
+                const id = a.id.replace('threeStarName-', '') || a.getAttribute('href').split('/').pop();
+                if (!id) continue;
+                const resp = await fetch(`/api/player/${id}`);
+                if (!resp.ok) continue;
+                const data = await resp.json();
+                const first = (data.firstName && data.firstName.default) ? data.firstName.default : (data.firstName || '');
+                const last = (data.lastName && data.lastName.default) ? data.lastName.default : (data.lastName || '');
+                const display = (first || last) ? `${first} ${last}`.trim() : (data.playerName || data.playerName?.default || '');
+                if (display && display.length > 0) {
+                    a.textContent = display;
+                }
+            } catch (e) { /* ignore individual failures */ }
+        }
+    } catch (e) { /* ignore */ }
+}
+
+// Fetch and render game videos (Condensed + Recap only)
+async function renderGameVideos(gameId) {
+    try {
+        const resp = await fetch(`/api/videos/${gameId}`);
+        if (!resp.ok) return;
+        const videoData = await resp.json();
+        const videosList = document.getElementById('videosList');
+        if (!videosList) return;
+        videosList.innerHTML = '';
+
+        const items = (videoData.items || []).filter(it => (it.tags || []).some(t => t.slug === 'condensed-game' || t.slug === 'game-recap'));
+        items.sort((a,b) => {
+            const aTags = (a.tags||[]).map(t=>t.slug);
+            const bTags = (b.tags||[]).map(t=>t.slug);
+            const aIsCond = aTags.includes('condensed-game');
+            const bIsCond = bTags.includes('condensed-game');
+            if (aIsCond && !bIsCond) return -1;
+            if (bIsCond && !aIsCond) return 1;
+            return 0;
+        });
+
+        items.forEach(item => {
+            const tags = item.tags || [];
+            const isCondensed = tags.some(t => t.slug === 'condensed-game');
+            const isRecap = tags.some(t => t.slug === 'game-recap');
+            if (!isCondensed && !isRecap) return;
+
+            const bcAccount = item.fields && item.fields.brightcoveAccountId ? item.fields.brightcoveAccountId : (item.fields && item.fields.BrightcoveAccountID ? item.fields.BrightcoveAccountID : null);
+            const bcId = item.fields && item.fields.brightcoveId ? item.fields.brightcoveId : (item.fields && item.fields.BrightcoveID ? item.fields.BrightcoveID : null);
+            if (!bcAccount || !bcId) return;
+
+            const playerUrl = `https://players.brightcove.net/${bcAccount}/EXtG1xJ7H_default/index.html?videoId=${bcId}`;
+            const base = item.title || (item.context && item.context.title) || (isCondensed ? 'Condensed Game' : 'Recap');
+            const sub = (item.context && item.context.subtitle) || (item.fields && item.fields.sourceTitle) || item.guid || item.id || '';
+            const broadcastTag = tags.find(t => t.slug && (t.slug === 'national-broadcast' || t.slug.endsWith('-broadcast')));
+            const broadcastLabel = broadcastTag ? ` (${broadcastTag.title || broadcastTag.slug})` : '';
+            const meta = sub ? ` — ${sub}` : '';
+            const title = `${base}${meta}${broadcastLabel}`;
+
+            const row = document.createElement('div');
+            row.className = 'bg-gray-50 rounded p-3 flex items-center justify-between';
+            row.innerHTML = `<div class="text-sm truncate">${title}</div><div><a href="${playerUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 bg-primary text-white px-3 py-1 rounded">▶ Watch</a></div>`;
+            videosList.appendChild(row);
+        });
+
+        if (videosList.children.length > 0) {
+            document.getElementById('videosSection').classList.remove('hidden');
+        }
+    } catch (e) {
+        // ignore
+    }
 }

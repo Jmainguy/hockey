@@ -1,0 +1,137 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Game</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+  tailwind.config = {
+      theme: {
+          extend: {
+              colors: {
+                  primary: '#0d47a1',
+                  secondary: '#1565c0',
+                  accent: '#ffb300'
+              }
+          }
+      }
+  }
+  </script>
+</head>
+<body class="bg-gray-50">
+  <div class="max-w-7xl mx-auto px-6 py-8">
+    <header class="bg-gradient-to-r from-primary to-secondary text-white rounded-3xl p-8 shadow-xl relative overflow-hidden mb-6">
+      <div class="relative z-10 flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight flex items-center gap-3"><span>🏒</span> NHL Fan Hub</h1>
+          <p class="mt-1 text-white/90 text-sm">Game details and videos</p>
+        </div>
+        <div class="flex gap-2 items-center">
+          <a href="/scores" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">Scores →</a>
+          <a href="/standings" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">Standings →</a>
+          <a href="/" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">Home</a>
+        </div>
+      </div>
+    </header>
+
+  <main class="max-w-6xl mx-auto p-6">
+    <div id="gameContainer" class="mt-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full overflow-hidden">
+        <div class="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between z-10">
+          <div class="flex items-center gap-4">
+            <h3 class="text-xl font-bold text-gray-800">Game Details</h3>
+            <div id="gameDate" class="text-sm text-gray-600"></div>
+          </div>
+          <div id="gameHeaderActions" class="flex items-center gap-2"></div>
+        </div>
+        <div class="p-6">
+          <div class="grid grid-cols-1 gap-6">
+            <!-- Main column (full width) -->
+            <div id="gameMain" class="space-y-6">
+              <div id="gameClock" class="text-center text-sm text-gray-600"></div>
+              <div id="gameInner">Loading...</div>
+
+              <!-- Inline moved sections (videos, three stars, venue) -->
+              <div id="videosSection" class="bg-gray-50 p-4 rounded-lg hidden">
+                <h4 class="text-md font-bold mb-3">🎥 Game Videos</h4>
+                <div id="videosList" class="space-y-3"></div>
+              </div>
+
+              
+
+              
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script src="/static/game-details.js"></script>
+  <script>
+    // Parse the gameId from the path
+    const pathParts = location.pathname.split('/');
+    const gameId = pathParts[pathParts.length - 1];
+
+    async function loadGamePage() {
+      const container = document.getElementById('gameInner');
+      container.innerHTML = '<div class="text-center py-12 text-gray-500">Loading game details...</div>';
+      try {
+        const resp = await fetch(`/api/gamecenter/${gameId}/landing`);
+        if (!resp.ok) throw new Error('Failed to load');
+        const data = await resp.json();
+
+        // Clock
+        const clockEl = document.getElementById('gameClock');
+        clockEl.textContent = data.clockText || '';
+
+        // Main details
+        const mainEl = document.getElementById('gameInner');
+        mainEl.innerHTML = displayGameDetailsHTML(data);
+
+        // Render videos using centralized helper
+        try { renderGameVideos(gameId); } catch (e) { /* ignore */ }
+        // Hydrate three-star names to full names where possible
+        try { hydrateThreeStarNames(); } catch (e) { /* ignore */ }
+
+        // Populate top-level game date next to header
+        try {
+          const gd = document.getElementById('gameDate');
+          if (gd) {
+            if (data.startTimeUTC) {
+              const d = new Date(data.startTimeUTC);
+              gd.textContent = d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+            } else if (data.gameDate) {
+              const d = new Date(data.gameDate);
+              gd.textContent = d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+            }
+          }
+        } catch (e) { /* ignore */ }
+
+        // If a team param is present (navigated from team schedule), add a Team Schedule link to the top header menu
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const team = params.get('team');
+          if (team) {
+            const headerMenu = document.querySelector('header .flex.gap-2.items-center');
+            if (headerMenu && !headerMenu.querySelector(`a[href="/team-schedule/${team}"]`)) {
+              const menuBtn = document.createElement('a');
+              menuBtn.href = `/team-schedule/${team}`;
+              menuBtn.className = 'px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm';
+              menuBtn.textContent = 'Team Schedule';
+              headerMenu.appendChild(menuBtn);
+            }
+          }
+        } catch (e) { /* ignore */ }
+
+      } catch (err) {
+        container.innerHTML = `<div class="text-center py-12 text-red-500">Error: ${err.message}</div>`;
+      }
+    }
+
+    loadGamePage();
+  </script>
+</body>
+</html>

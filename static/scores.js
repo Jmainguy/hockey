@@ -95,9 +95,13 @@ function createGameCard(game) {
     const card = document.createElement('div');
     card.className = 'bg-white rounded-2xl shadow-md hover:shadow-xl transition p-6 cursor-pointer';
     
-    // Add click handler to show game details
+    // Click opens a dedicated game page so it can be shared
     card.addEventListener('click', () => {
-        showGameDetails(game);
+        const dateStr = formatDate(currentDate);
+        const url = new URL(window.location.origin + `/game/${game.id}`);
+        url.searchParams.set('from', 'schedule');
+        url.searchParams.set('date', dateStr);
+        window.location.href = url.toString();
     });
     
     const awayTeam = game.awayTeam;
@@ -109,9 +113,22 @@ function createGameCard(game) {
     let statusHTML = '';
     let scoreHTML = '';
     
-    if (gameState === 'FUT' || gameScheduleState === 'TBD') {
-        // Future game - show start time
-        const startTime = formatTime(game.startTimeUTC);
+    if (gameState === 'PRE') {
+        // Pregame - show pregame badge and start time
+        const startTime = game.startTimeUTC ? formatTime(game.startTimeUTC) : 'TBD';
+        statusHTML = `<div class="text-center mb-2">
+                <span class="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-semibold">
+                    <span class="text-sm">⏳</span> Pregame • ${startTime}
+                </span>
+            </div>`;
+        scoreHTML = `
+            <div class="text-center py-4">
+                <div class="text-4xl font-bold text-gray-300">VS</div>
+            </div>
+        `;
+    } else if (gameState === 'FUT' || gameScheduleState === 'TBD') {
+        // Future game - show start time only
+        const startTime = game.startTimeUTC ? formatTime(game.startTimeUTC) : 'TBD';
         statusHTML = `<div class="text-center text-sm font-semibold text-gray-600 mb-2">${startTime}</div>`;
         scoreHTML = `
             <div class="text-center py-4">
@@ -119,13 +136,27 @@ function createGameCard(game) {
             </div>
         `;
     } else if (gameState === 'LIVE' || gameState === 'CRIT') {
-        // Live game
-        const period = game.periodDescriptor?.periodType || 'LIVE';
-        const clock = game.clock?.timeRemaining || '';
+        // Live game - prefer clock.timeRemaining and show period number/type
+        const pd = game.periodDescriptor || {};
+        const periodType = pd.periodType || '';
+        const periodNum = pd.number || '';
+        const clockObj = game.clock || {};
+        const isIntermission = !!clockObj.inIntermission;
+        const clock = clockObj.timeRemaining || clockObj.TimeRemaining || '';
+        let stateText = '';
+        if (isIntermission) {
+            stateText = `Intermission${periodNum ? ' • ' + (periodNum) : ''}`;
+        } else if (clock) {
+            stateText = `${periodType} ${periodNum} • ${clock}`.trim();
+        } else if (periodType || periodNum) {
+            stateText = `${periodType} ${periodNum}`.trim();
+        } else {
+            stateText = 'Live';
+        }
         statusHTML = `
             <div class="text-center mb-2">
                 <span class="inline-flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-bold">
-                    <span class="animate-pulse">🔴</span> ${period} ${clock}
+                    <span class="animate-pulse">🔴</span> ${stateText}
                 </span>
             </div>
         `;
@@ -291,6 +322,35 @@ async function showGameDetails(game) {
         
         const data = await response.json();
         displayGameDetails(data, game, modal);
+        // Additionally fetch related videos by gameId and append to modal
+        fetch(`/api/videos/${gameId}`).then(resp => {
+            if (!resp.ok) return null;
+            return resp.json();
+        }).then(videoData => {
+            if (!videoData || !videoData.items || videoData.items.length === 0) return;
+            try {
+                const content = modal.querySelector('#gameDetailsContent');
+                let videosHTML = '<div class="mt-6"><h4 class="text-lg font-bold mb-3">🎥 Game Videos</h4><div class="grid grid-cols-1 gap-3">';
+                videoData.items.forEach(item => {
+                    const bcAccount = item.fields && item.fields.brightcoveAccountId ? item.fields.brightcoveAccountId : (item.fields && item.fields.BrightcoveAccountID ? item.fields.BrightcoveAccountID : null);
+                    const bcId = item.fields && item.fields.brightcoveId ? item.fields.brightcoveId : (item.fields && item.fields.BrightcoveID ? item.fields.BrightcoveID : null);
+                    // Some items use item.fields.BrightcoveID or item.fields.brightcoveId; also item.fields.duration etc.
+                    if (bcAccount && bcId) {
+                        const playerUrl = `https://players.brightcove.net/${bcAccount}/EXtG1xJ7H_default/index.html?videoId=${bcId}`;
+                        const base = item.title || (item.context && item.context.title) || 'Video';
+                        const sub = (item.context && item.context.subtitle) || (item.fields && item.fields.sourceTitle) || (item.fields && item.fields.publishedDate) || item.guid || item.id || '';
+                        const meta = sub ? ` — ${sub}` : '';
+                        const title = `${base}${meta}`;
+                        videosHTML += `<div class="bg-gray-50 rounded p-3 flex items-center justify-between"><div class="text-sm">${title}</div><div><a href="${playerUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 bg-primary text-white px-3 py-1 rounded">▶ Watch</a></div></div>`;
+                    }
+                });
+                videosHTML += '</div></div>';
+                // Append videos section after existing content
+                content.insertAdjacentHTML('beforeend', videosHTML);
+            } catch (e) {
+                // ignore
+            }
+        }).catch(() => {});
     } catch (error) {
         const content = modal.querySelector('#gameDetailsContent');
         content.innerHTML = `<div class="text-center py-12 text-red-500">Error loading game details: ${error.message}</div>`;

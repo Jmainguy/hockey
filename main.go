@@ -39,6 +39,7 @@ func main() {
 	router.HandleFunc("/trivia", handleTrivia).Methods("GET")
 	router.HandleFunc("/coach", handleCoach).Methods("GET")
 	router.HandleFunc("/player/{playerId}", handlePlayer).Methods("GET")
+	router.HandleFunc("/game/{gameId}", handleGamePage).Methods("GET")
 	router.HandleFunc("/api/teams", handleAPITeams).Methods("GET")
 	router.HandleFunc("/api/team/{teamId}", handleAPITeamDetails).Methods("GET")
 	router.HandleFunc("/api/roster/{teamId}", handleAPIRoster).Methods("GET")
@@ -50,6 +51,7 @@ func main() {
 	router.HandleFunc("/api/gamecenter/{gameId}/landing", handleAPIGameLanding).Methods("GET")
 	router.HandleFunc("/api/team-news/{teamId}", handleAPITeamNews).Methods("GET")
 	router.HandleFunc("/api/team-transactions/{teamId}", handleAPITeamTransactions).Methods("GET")
+	router.HandleFunc("/api/videos/{gameId}", handleAPIVideos).Methods("GET")
 
 	port := "8080"
 	fmt.Printf("Server starting on http://localhost:%s\n", port)
@@ -95,6 +97,10 @@ func handleTeam(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	serveEmbeddedFile(w, r, "team.html")
+}
+
+func handleGamePage(w http.ResponseWriter, r *http.Request) {
+	serveEmbeddedFile(w, r, "game.html")
 }
 
 func handleTrivia(w http.ResponseWriter, r *http.Request) {
@@ -327,8 +333,35 @@ func handleAPIGameLanding(w http.ResponseWriter, r *http.Request) {
 	gameId := vars["gameId"]
 
 	// Construct NHL API URL for game landing
-	url := fmt.Sprintf("%s/gamecenter/%s/landing", BaseURL, gameId)
+	// Use typed fetcher so we can enrich the payload reliably
+	landing, err := GetGameLanding(gameId)
+	if err != nil {
+		// Fallback to proxying raw data if typed fetch fails
+		url := fmt.Sprintf("%s/gamecenter/%s/landing", BaseURL, gameId)
+		body, berr := fetchURL(url)
+		if berr != nil {
+			http.Error(w, berr.Error(), http.StatusBadGateway)
+			return
+		}
+		defer func() {
+			if err := body.Close(); err != nil {
+				log.Printf("Error closing response body: %v", err)
+			}
+		}()
+		data, rerr := io.ReadAll(body)
+		if rerr != nil {
+			http.Error(w, rerr.Error(), http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if _, werr := w.Write(data); werr != nil {
+			log.Printf("Error writing landing data: %v", werr)
+		}
+		return
+	}
 
+	// Read raw landing again to preserve original payload structure while enriching
+	url := fmt.Sprintf("%s/gamecenter/%s/landing", BaseURL, gameId)
 	body, err := fetchURL(url)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -339,15 +372,40 @@ func handleAPIGameLanding(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Error closing response body: %v", err)
 		}
 	}()
-
-	data, err := io.ReadAll(body)
+	rawData, err := io.ReadAll(body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 
+	// Unmarshal to a generic map so we can add fields
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rawData, &payload); err != nil {
+		// If unmarshal fails, return raw data
+		w.Header().Set("Content-Type", "application/json")
+		if _, werr := w.Write(rawData); werr != nil {
+			log.Printf("Error writing landing data: %v", werr)
+		}
+		return
+	}
+
+	// Attach discreteClips and clockText
+	clips := ExtractDiscreteClips(landing)
+	// Always attach as an array (possibly empty) so client doesn't get null
+	payload["discreteClips"] = clips
+	payload["clockText"] = ClockText(landing)
+
+	enriched, err := json.Marshal(payload)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		if _, werr := w.Write(rawData); werr != nil {
+			log.Printf("Error writing landing data: %v", werr)
+		}
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	if _, err := w.Write(data); err != nil {
+	if _, err := w.Write(enriched); err != nil {
 		log.Printf("Error writing landing data: %v", err)
 	}
 }
@@ -401,5 +459,41 @@ func handleAPITeamSchedule(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(data); err != nil {
 		log.Printf("Error writing team schedule data: %v", err)
+	}
+}
+
+// Proxy video search for a given gameId from forge-dapi
+func handleAPIVideos(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	gameId := vars["gameId"]
+	if gameId == "" {
+		http.Error(w, "missing gameId", http.StatusBadRequest)
+		return
+	}
+
+	// Build forge-dapi URL (limit 100)
+	url := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-US/videos?$limit=100&tags.slug=gameid-%s", gameId)
+
+	body, err := fetchURL(url)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer func() {
+		if err := body.Close(); err != nil {
+			log.Printf("Error closing response body: %v", err)
+		}
+	}()
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	// Return raw forge response to the client
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(data); err != nil {
+		log.Printf("Error writing videos response: %v", err)
 	}
 }

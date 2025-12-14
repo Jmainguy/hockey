@@ -15,6 +15,158 @@ const (
 	BaseURL = "https://api-web.nhle.com/v1"
 )
 
+// GameLanding represents a typed view of the /gamecenter/{id}/landing JSON we fetch
+type GameLanding struct {
+	ID                int64  `json:"id"`
+	GameDate          string `json:"gameDate"`
+	GameState         string `json:"gameState"`
+	GameScheduleState string `json:"gameScheduleState"`
+	ShootoutInUse     bool   `json:"shootoutInUse"`
+	Clock             struct {
+		InIntermission   bool   `json:"inIntermission"`
+		Running          bool   `json:"running"`
+		SecondsRemaining int64  `json:"secondsRemaining"`
+		TimeRemaining    string `json:"timeRemaining"`
+	} `json:"clock"`
+	PeriodDescriptor struct {
+		Number     int    `json:"number"`
+		PeriodType string `json:"periodType"`
+	} `json:"periodDescriptor"`
+	HomeTeam struct {
+		ID     int64 `json:"id"`
+		Abbrev struct {
+			Default string `json:"default"`
+		} `json:"abbrev"`
+		Score int64 `json:"score"`
+		Sog   int64 `json:"sog"`
+	} `json:"homeTeam"`
+	AwayTeam struct {
+		ID     int64 `json:"id"`
+		Abbrev struct {
+			Default string `json:"default"`
+		} `json:"abbrev"`
+		Score int64 `json:"score"`
+		Sog   int64 `json:"sog"`
+	} `json:"awayTeam"`
+	Summary struct {
+		Scoring []struct {
+			PeriodDescriptor struct {
+				Number     int    `json:"number"`
+				PeriodType string `json:"periodType"`
+			} `json:"periodDescriptor"`
+			Goals []struct {
+				DiscreteClip            int64  `json:"discreteClip"`
+				DiscreteClipFr          int64  `json:"discreteClipFr"`
+				HighlightClipSharingURL string `json:"highlightClipSharingUrl"`
+			} `json:"goals"`
+		} `json:"scoring"`
+		Shootout []struct {
+			DiscreteClip   int64 `json:"discreteClip"`
+			DiscreteClipFr int64 `json:"discreteClipFr"`
+		} `json:"shootout"`
+	} `json:"summary"`
+}
+
+// GetGameLanding fetches and decodes the game landing JSON into a typed struct
+func GetGameLanding(gameId string) (*GameLanding, error) {
+	url := fmt.Sprintf("%s/gamecenter/%s/landing", BaseURL, gameId)
+	body, err := fetchURL(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch game landing: %w", err)
+	}
+	defer func() {
+		if cerr := body.Close(); cerr != nil {
+			log.Printf("Error closing response body: %v", cerr)
+		}
+	}()
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return nil, fmt.Errorf("reading landing response: %w", err)
+	}
+
+	var landing GameLanding
+	if err := json.Unmarshal(data, &landing); err != nil {
+		return nil, fmt.Errorf("parsing landing response: %w", err)
+	}
+
+	return &landing, nil
+}
+
+// ExtractDiscreteClips returns all discreteClip IDs found in goals and shootout sections
+func ExtractDiscreteClips(landing *GameLanding) []int64 {
+	var clips []int64
+	if landing == nil {
+		return clips
+	}
+	// First prefer any goal that appears inside a scoring period with periodType == "SO" (final shootout goal)
+	for _, sc := range landing.Summary.Scoring {
+		if strings.EqualFold(sc.PeriodDescriptor.PeriodType, "SO") {
+			for _, g := range sc.Goals {
+				if g.DiscreteClip != 0 {
+					clips = append(clips, g.DiscreteClip)
+				}
+				if g.DiscreteClipFr != 0 {
+					clips = append(clips, g.DiscreteClipFr)
+				}
+			}
+			if len(clips) > 0 {
+				return clips
+			}
+		}
+	}
+
+	// Otherwise collect all goal discreteClips
+	for _, sc := range landing.Summary.Scoring {
+		for _, g := range sc.Goals {
+			if g.DiscreteClip != 0 {
+				clips = append(clips, g.DiscreteClip)
+			}
+			if g.DiscreteClipFr != 0 {
+				clips = append(clips, g.DiscreteClipFr)
+			}
+		}
+	}
+
+	// And include any shootout entries as a fallback
+	for _, s := range landing.Summary.Shootout {
+		if s.DiscreteClip != 0 {
+			clips = append(clips, s.DiscreteClip)
+		}
+		if s.DiscreteClipFr != 0 {
+			clips = append(clips, s.DiscreteClipFr)
+		}
+	}
+	return clips
+}
+
+// ClockText returns a human-friendly clock string for display when game is live or in intermission
+func ClockText(landing *GameLanding) string {
+	if landing == nil {
+		return ""
+	}
+	// If running, show remaining time and period
+	if landing.Clock.Running {
+		period := landing.PeriodDescriptor.Number
+		tr := landing.Clock.TimeRemaining
+		if tr == "" {
+			tr = landing.Clock.TimeRemaining
+		}
+		return fmt.Sprintf("%s — Period %d", tr, period)
+	}
+	if landing.Clock.InIntermission {
+		return "Intermission"
+	}
+	// Not running and not intermission — show period descriptor state
+	if landing.GameState != "FINAL" && landing.GameState != "FINAL_OVERTIME" && landing.GameState != "FINAL_SHOOTOUT" {
+		// Game not finished but clock not running — show period number
+		if landing.PeriodDescriptor.Number > 0 {
+			return fmt.Sprintf("Period %d", landing.PeriodDescriptor.Number)
+		}
+	}
+	return ""
+}
+
 var (
 	httpClient = &http.Client{
 		Timeout: 10 * time.Second,

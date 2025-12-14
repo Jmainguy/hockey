@@ -332,12 +332,15 @@ function createDayCell(day) {
         });
         cellHtml += '</div>';
         
-        // Add click handlers to game items
+        // Add click handlers to game items - navigate to dedicated game page instead of modal
         cell.addEventListener('click', (e) => {
             const gameItem = e.target.closest('.game-item-calendar');
             if (gameItem) {
                 const gameId = gameItem.dataset.gameId;
-                showGameDetails(gameId);
+                const url = new URL(window.location.origin + `/game/${gameId}`);
+                url.searchParams.set('from', 'team-schedule');
+                url.searchParams.set('team', currentTeamId || currentTeamAbbrev || '');
+                window.location.href = url.toString();
             }
         });
     }
