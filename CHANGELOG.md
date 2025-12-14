@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/Jmainguy/hockey/compare/v1.5.4...v1.6.0) (2025-12-14)
+
+
+### Features
+
+* upgrade scoring page to have videos and links ([c39ee8a](https://github.com/Jmainguy/hockey/commit/c39ee8a594edc8193e868703633eb8f19072db03))
+
 ## [1.5.4](https://github.com/Jmainguy/hockey/compare/v1.5.3...v1.5.4) (2025-12-13)
 
 
