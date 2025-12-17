@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.5](https://github.com/Jmainguy/hockey/compare/v1.6.4...v1.6.5) (2025-12-17)
+
+
+### Bug Fixes
+
+* page loads now ([4842489](https://github.com/Jmainguy/hockey/commit/48424895086e62b4f9bca95f815073e9dafe5a8d))
+
 ## [1.6.4](https://github.com/Jmainguy/hockey/compare/v1.6.3...v1.6.4) (2025-12-17)
 
 
