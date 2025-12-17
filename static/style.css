@@ -523,6 +523,23 @@
     position: relative;
 }
 
+/* Mobile helpers for the game page to prevent overlap and overflow */
+.game-details img, .game-details .logo, img[class*="w-"] {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Ensure flex children can shrink on small screens */
+.min-w-0 { min-width: 0; }
+
+/* Break long player/team names and other text to avoid overlap */
+.break-any { overflow-wrap: anywhere; word-break: break-word; }
+
+/* Safety font-size reduction for tiny screens */
+@media (max-width: 420px) {
+    .score-safe-sm { font-size: 1.75rem !important; }
+}
+
 .stat-item.career-best::after {
     content: '★';
     position: absolute;

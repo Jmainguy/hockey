@@ -15,19 +15,19 @@ function displayGameDetailsHTML(data) {
     const statusClass = data.gameState === 'LIVE' ? 'bg-red-100 text-red-700' : (data.gameState === 'FUT' || data.gameState === 'PRE') ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-700';
     let detailsHTML = `
         <div class="flex flex-col md:flex-row items-center md:items-stretch gap-4 mb-6 pb-6 border-b">
-            <div class="flex-1 flex flex-col items-center md:items-start md:pl-4">
+            <div class="flex-1 flex flex-col items-center md:items-start md:pl-4 min-w-0">
                 <a href="/team/${homeTeam.abbrev}" class="inline-block"><img src="https://assets.nhle.com/logos/nhl/svg/${homeTeam.abbrev}_light.svg" alt="${homeTeam.abbrev}" class="w-14 h-14 mb-2"></a>
-                <div class="text-lg font-bold text-gray-800">${homeTeam.placeName?.default || homeTeam.abbrev}</div>
+                <div class="text-lg font-bold text-gray-800 truncate break-any">${homeTeam.placeName?.default || homeTeam.abbrev}</div>
                 <div class="text-xs text-gray-500 mt-1">${isFutureGame ? (homeTeam.record || 'Record TBD') : 'SOG: ' + (homeTeam.sog || 0)}</div>
             </div>
 
-            <div class="w-full md:w-auto flex flex-col items-center justify-center">
-                <div class="inline-flex items-center gap-4">
-                    <div class="text-5xl font-extrabold text-gray-900">${homeTeam.score || 0}</div>
+            <div class="w-full md:w-auto flex flex-col items-center justify-center min-w-0">
+                <div class="inline-flex items-center gap-4 flex-wrap justify-center">
+                    <div class="text-4xl sm:text-5xl font-extrabold text-gray-900 score-safe-sm">${homeTeam.score || 0}</div>
                     <div class="text-2xl font-bold text-gray-400">-</div>
-                    <div class="text-5xl font-extrabold text-gray-900">${awayTeam.score || 0}</div>
+                    <div class="text-4xl sm:text-5xl font-extrabold text-gray-900 score-safe-sm">${awayTeam.score || 0}</div>
                 </div>
-                <div class="mt-2 inline-flex items-center gap-3">
+                <div class="mt-2 inline-flex items-center gap-3 flex-wrap justify-center">
                     <span class="text-sm font-semibold ${statusClass} px-3 py-1 rounded-full">${statusText}</span>
                     ${data.clockText ? `<span class="text-sm text-gray-500">• ${data.clockText}</span>` : ''}
                     ${periodInfo ? `<span class="text-xs text-gray-400 px-2 py-0.5 bg-gray-100 rounded">${periodInfo}</span>` : ''}
@@ -35,9 +35,9 @@ function displayGameDetailsHTML(data) {
                 
             </div>
 
-            <div class="flex-1 flex flex-col items-center md:items-end md:pr-4">
+            <div class="flex-1 flex flex-col items-center md:items-end md:pr-4 min-w-0">
                 <a href="/team/${awayTeam.abbrev}" class="inline-block"><img src="https://assets.nhle.com/logos/nhl/svg/${awayTeam.abbrev}_light.svg" alt="${awayTeam.abbrev}" class="w-14 h-14 mb-2"></a>
-                <div class="text-lg font-bold text-gray-800">${awayTeam.placeName?.default || awayTeam.abbrev}</div>
+                <div class="text-lg font-bold text-gray-800 truncate break-any">${awayTeam.placeName?.default || awayTeam.abbrev}</div>
                 <div class="text-xs text-gray-500 mt-1">${isFutureGame ? (awayTeam.record || 'Record TBD') : 'SOG: ' + (awayTeam.sog || 0)}</div>
             </div>
         </div>
@@ -441,7 +441,7 @@ function displayGameDetailsHTML(data) {
                                <a href="/team/${teamAbbrev}" class="inline-block"><img src="https://assets.nhle.com/logos/nhl/svg/${teamAbbrev}_light.svg" alt="${teamAbbrev}" class="w-8 h-8 flex-shrink-0"></a>
                                <a href="/player/${scorerId || ''}" class="inline-block"><img src="${goal.headshot}" alt="${scorerName}" class="w-10 h-10 rounded-full object-cover flex-shrink-0"></a>
                             <div class="flex-1 min-w-0">
-                                <div class="font-bold"><a href="/player/${scorerId || ''}" class="underline">${scorerName}</a> (${goal.goalsToDate || 0}) ${strengthBadge}</div>
+                                <div class="font-bold"><a href="/player/${scorerId || ''}" class="underline truncate break-any">${scorerName}</a> (${goal.goalsToDate || 0}) ${strengthBadge}</div>
                                 ${assists ? `<div class="text-gray-600 text-xs mt-1">Assists: ${assists}</div>` : ''}
                                 <div class="text-gray-500 text-xs mt-1">${shotType ? shotType + ' shot' : ''}</div>
                                 ${highlightUrl ? `<div class="mt-2"><a href="${highlightUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs bg-primary text-white px-3 py-1 rounded hover:bg-secondary transition">🎥 Watch Highlight</a></div>` : ''}
@@ -518,9 +518,9 @@ function displayGameDetailsHTML(data) {
                             <img src="https://assets.nhle.com/logos/nhl/svg/${teamAbbrev}_light.svg" 
                                  alt="${teamAbbrev}" 
                                  class="w-6 h-6 flex-shrink-0">
-                            <div class="flex-1">
-                                <span class="font-semibold">${playerDisplay}</span>
-                                <span class="text-gray-600"> - ${penaltyDescription} - ${descKey}</span>
+                            <div class="flex-1 min-w-0">
+                                <span class="font-semibold break-any">${playerDisplay}</span>
+                                <span class="text-gray-600 break-any"> - ${penaltyDescription} - ${descKey}</span>
                             </div>
                             <div class="text-gray-500 text-xs font-mono">${time}</div>
                         </div>
