@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.2](https://github.com/Jmainguy/hockey/compare/v1.6.1...v1.6.2) (2025-12-17)
+
+
+### Bug Fixes
+
+* mobile optimization for pregame ([a9d3b01](https://github.com/Jmainguy/hockey/commit/a9d3b015a10bedf6302a000ca15a5601c94bd000))
+
 ## [1.6.1](https://github.com/Jmainguy/hockey/compare/v1.6.0...v1.6.1) (2025-12-17)
 
 
