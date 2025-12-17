@@ -440,17 +440,19 @@ function displayGameDetailsHTML(data) {
                     }
                     
                     detailsHTML += `
-                        <div class="flex items-start gap-3 text-sm bg-white rounded p-3">
+                        <div class="scoring-row text-sm bg-white rounded p-3">
+                           <div class="flex items-center gap-3">
                                <a href="/team/${teamAbbrev}" class="inline-block"><img src="https://assets.nhle.com/logos/nhl/svg/${teamAbbrev}_light.svg" alt="${teamAbbrev}" class="w-8 h-8 flex-shrink-0"></a>
-                               <a href="/player/${scorerId || ''}" class="inline-block"><img src="${goal.headshot}" alt="${scorerName}" class="w-10 h-10 rounded-full object-cover flex-shrink-0"></a>
-                            <div class="flex-1 min-w-0">
-                                <div class="font-bold"><a href="/player/${scorerId || ''}" class="underline truncate break-any">${scorerName}</a> (${goal.goalsToDate || 0}) ${strengthBadge}</div>
-                                ${assists ? `<div class="text-gray-600 text-xs mt-1">Assists: ${assists}</div>` : ''}
-                                <div class="text-gray-500 text-xs mt-1">${shotType ? shotType + ' shot' : ''}</div>
-                                ${highlightUrl ? `<div class="mt-2"><a href="${highlightUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs bg-primary text-white px-3 py-1 rounded hover:bg-secondary transition">🎥 Watch Highlight</a></div>` : ''}
-                                ${discreteClipId ? `<div class="mt-2"><a href="https://players.brightcove.net/6415718365001/EXtG1xJ7H_default/index.html?videoId=${discreteClipId}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs bg-primary text-white px-3 py-1 rounded hover:bg-secondary transition">▶ Watch Clip</a></div>` : ''}
+                               <a href="/player/${scorerId || ''}" class="inline-block"><img src="${goal.headshot}" alt="${getFullName(goal) || scorerName}" class="w-10 h-10 rounded-full object-cover flex-shrink-0"></a>
+                           </div>
+                           <div class="min-w-0">
+                               <div class="font-bold truncate"><a href="/player/${scorerId || ''}" class="underline break-any">${getFullName(goal) || scorerName}</a> (${goal.goalsToDate || 0}) ${strengthBadge}</div>
+                               ${assists ? `<div class="text-gray-600 text-xs mt-1 truncate break-any">Assists: ${assists}</div>` : ''}
+                               <div class="text-gray-500 text-xs mt-1">${shotType ? shotType + ' shot' : ''}</div>
+                               ${highlightUrl ? `<div class="mt-2"><a href="${highlightUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs bg-primary text-white px-3 py-1 rounded hover:bg-secondary transition">🎥 Watch Highlight</a></div>` : ''}
+                               ${discreteClipId ? `<div class="mt-2"><a href="https://players.brightcove.net/6415718365001/EXtG1xJ7H_default/index.html?videoId=${discreteClipId}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs bg-primary text-white px-3 py-1 rounded hover:bg-secondary transition">▶ Watch Clip</a></div>` : ''}
                             </div>
-                            <div class="text-right flex-shrink-0">
+                            <div class="time-score">
                                 <div class="font-mono text-xs text-gray-600">${time}</div>
                                 <div class="font-bold text-sm text-primary">${score}</div>
                             </div>

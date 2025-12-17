@@ -557,8 +557,8 @@
     .leader-card { padding: 10px; }
     .leader-card { padding: 10px; background: transparent; border: none; box-shadow: none; }
     .leader-card .leader-headshot { width: 72px; height: 72px; }
-    /* Remove boxed backgrounds inside game-details to use full-width space */
-    .game-details .bg-gray-50, .game-details .bg-white, .game-details .rounded-lg { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
+    /* Only remove boxed backgrounds for leader cards on small screens; keep header and scoring boxes intact for readability */
+    .game-details .leader-card { background: transparent !important; border: none !important; box-shadow: none !important; padding: 8px !important; }
 }
 
 .stat-item.career-best::after {
@@ -686,6 +686,13 @@ body.action-bg { background-size:cover; background-position:center; background-a
 }
 @media (max-width:420px) {
     .scoring-row .time-score { width: 80px; }
+}
+
+/* Ensure score stays inline and doesn't stack on small screens */
+.score-block .inline-flex { flex-wrap: nowrap !important; }
+.score-block .score-safe-sm { white-space: nowrap; display: inline-block; }
+@media (max-width:640px) {
+    .score-block .score-safe-sm { font-size: 2.25rem !important; }
 }
 }
 
