@@ -235,7 +235,7 @@ function createGameCard(game) {
                      class="w-20 h-20 mx-auto mb-2 drop-shadow-md">
                 <div class="font-bold text-gray-800">${awayTeam.placeName?.default || awayTeam.abbrev}</div>
                 <div class="text-sm text-gray-600">${awayTeam.commonName?.default || ''}</div>
-                <div class="text-xs text-gray-500 mt-1">@ ${awayTeam.record || ''}</div>
+                <div class="text-xs text-gray-500 mt-1">${awayTeam.record || ''}</div>
             </div>
         </div>
         ${broadcastHTML}
