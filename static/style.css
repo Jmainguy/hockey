@@ -873,6 +873,19 @@ body.action-bg { background-size:cover; background-position:center; background-a
         grid-template-columns: repeat(2, 1fr);
     }
 
+    /* Desktop-only game header card */
+    .game-header {
+        background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(250,250,252,0.95));
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        padding: 18px 20px;
+        box-shadow: 0 10px 30px rgba(16,24,40,0.06);
+        align-items: center;
+    }
+    .game-header .team-block img { width: 72px; height: 72px; }
+    .game-header .team-block .text-lg { font-size: 1.125rem; }
+    .game-header .score-block .score-safe-sm { font-size: 3.25rem; line-height: 1; }
+    .game-header .status-badge { display: inline-block; }
     .roster-table {
         font-size: 0.9rem;
     }

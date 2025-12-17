@@ -22,33 +22,32 @@ function displayGameDetailsHTML(data) {
     const periodInfo = data.periodDescriptor ? `${data.periodDescriptor.periodType} ${data.periodDescriptor.number || ''}` : '';
     // status badge color
     const statusClass = data.gameState === 'LIVE' ? 'bg-red-100 text-red-700' : (data.gameState === 'FUT' || data.gameState === 'PRE') ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-700';
-                    detailsHTML += `
-                        <div class="scoring-row text-sm bg-white rounded p-3">
-                           <div class="flex items-center gap-3">
-                               <a href="/team/${teamAbbrev}" class="inline-block"><img src="https://assets.nhle.com/logos/nhl/svg/${teamAbbrev}_light.svg" alt="${teamAbbrev}" class="w-8 h-8 flex-shrink-0"></a>
-                               <a href="/player/${scorerId || ''}" class="inline-block"><img src="${goal.headshot}" alt="${getFullName(goal) || scorerName}" class="w-10 h-10 rounded-full object-cover flex-shrink-0"></a>
-                           </div>
-                           <div class="min-w-0">
-                               <div class="font-bold truncate"><a href="/player/${scorerId || ''}" class="underline break-any">${getFullName(goal) || scorerName}</a> (${goal.goalsToDate || 0}) ${strengthBadge}</div>
-                               ${assists ? `<div class="text-gray-600 text-xs mt-1 truncate break-any">Assists: ${assists}</div>` : ''}
-                               <div class="text-gray-500 text-xs mt-1">${shotType ? shotType + ' shot' : ''}</div>
-                               ${highlightUrl ? `<div class="mt-2"><a href="${highlightUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs bg-primary text-white px-3 py-1 rounded hover:bg-secondary transition">🎥 Watch Highlight</a></div>` : ''}
-                               ${discreteClipId ? `<div class="mt-2"><a href="https://players.brightcove.net/6415718365001/EXtG1xJ7H_default/index.html?videoId=${discreteClipId}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs bg-primary text-white px-3 py-1 rounded hover:bg-secondary transition">▶ Watch Clip</a></div>` : ''}
-                            </div>
-                            <div class="time-score">
-                                <div class="font-mono text-xs text-gray-600">${time}</div>
-                                <div class="font-bold text-sm text-primary">${score}</div>
-                            </div>
-                        </div>
-                    `;
+
+    // Build the main header (home - score/VS - away). `detailsHTML` is the top-level string we append to.
+    let detailsHTML = `
+        <div class="game-header flex items-center justify-between gap-4 mb-6 pb-6 border-b flex-nowrap">
+            <div class="team-block flex-none md:flex-1 flex flex-col items-center md:items-start md:pl-4 min-w-0 text-center md:text-left">
+                <a href="/team/${homeTeam.abbrev}" class="inline-block"><img src="https://assets.nhle.com/logos/nhl/svg/${homeTeam.abbrev}_light.svg" alt="${homeTeam.abbrev}" class="w-14 h-14 mb-2"></a>
+                <div class="text-lg font-bold text-gray-800 truncate break-any">${homeTeam.placeName?.default || homeTeam.abbrev}</div>
+                <div class="text-xs text-gray-500 mt-1">${isFutureGame ? (homeTeam.record || 'Record TBD') : 'SOG: ' + (homeTeam.sog || 0)}</div>
+            </div>
+
+            <div class="score-block w-full md:w-auto flex-1 flex flex-col items-center justify-center min-w-0">
+                <div class="inline-flex items-center gap-4 flex-wrap justify-center items-baseline">
+                    ${isFutureGame ? `<div class="text-lg font-bold text-gray-700">VS</div>` : `
+                    <div class="text-4xl sm:text-5xl font-extrabold text-gray-900 score-safe-sm">${homeTeam.score || 0}</div>
+                    <div class="text-2xl font-bold text-gray-400">-</div>
+                    <div class="text-4xl sm:text-5xl font-extrabold text-gray-900 score-safe-sm">${awayTeam.score || 0}</div>
+                    `}
+                </div>
+                <div class="mt-2 inline-flex items-center gap-3 flex-wrap justify-center">
                     <span class="text-sm font-semibold ${statusClass} px-3 py-1 rounded-full">${statusText}</span>
                     ${data.clockText ? `<span class="text-sm text-gray-500">• ${data.clockText}</span>` : ''}
                     ${periodInfo ? `<span class="text-xs text-gray-400 px-2 py-0.5 bg-gray-100 rounded">${periodInfo}</span>` : ''}
                 </div>
-                
             </div>
 
-            <div class="flex-none md:flex-1 flex flex-col items-center md:items-end md:pr-4 min-w-0 text-center md:text-right">
+            <div class="team-block flex-none md:flex-1 flex flex-col items-center md:items-end md:pr-4 min-w-0 text-center md:text-right">
                 <a href="/team/${awayTeam.abbrev}" class="inline-block"><img src="https://assets.nhle.com/logos/nhl/svg/${awayTeam.abbrev}_light.svg" alt="${awayTeam.abbrev}" class="w-14 h-14 mb-2"></a>
                 <div class="text-lg font-bold text-gray-800 truncate break-any">${awayTeam.placeName?.default || awayTeam.abbrev}</div>
                 <div class="text-xs text-gray-500 mt-1">${isFutureGame ? (awayTeam.record || 'Record TBD') : 'SOG: ' + (awayTeam.sog || 0)}</div>
