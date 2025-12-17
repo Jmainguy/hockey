@@ -540,6 +540,24 @@
     .score-safe-sm { font-size: 1.75rem !important; }
 }
 
+/* Leader card styles for skater and goalie leader displays */
+.leader-card {
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+}
+.leader-card .leader-headshot {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+}
+@media (max-width: 640px) {
+    .leader-card { padding: 10px; }
+    .leader-card .leader-headshot { width: 56px; height: 56px; }
+}
+
 .stat-item.career-best::after {
     content: '★';
     position: absolute;

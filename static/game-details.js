@@ -14,8 +14,8 @@ function displayGameDetailsHTML(data) {
     // status badge color
     const statusClass = data.gameState === 'LIVE' ? 'bg-red-100 text-red-700' : (data.gameState === 'FUT' || data.gameState === 'PRE') ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-700';
     let detailsHTML = `
-        <div class="flex flex-col md:flex-row items-center md:items-stretch gap-4 mb-6 pb-6 border-b">
-            <div class="flex-1 flex flex-col items-center md:items-start md:pl-4 min-w-0">
+        <div class="flex items-center justify-between gap-4 mb-6 pb-6 border-b flex-nowrap">
+            <div class="flex-1 flex flex-col items-center md:items-start md:pl-4 min-w-0 text-center md:text-left">
                 <a href="/team/${homeTeam.abbrev}" class="inline-block"><img src="https://assets.nhle.com/logos/nhl/svg/${homeTeam.abbrev}_light.svg" alt="${homeTeam.abbrev}" class="w-14 h-14 mb-2"></a>
                 <div class="text-lg font-bold text-gray-800 truncate break-any">${homeTeam.placeName?.default || homeTeam.abbrev}</div>
                 <div class="text-xs text-gray-500 mt-1">${isFutureGame ? (homeTeam.record || 'Record TBD') : 'SOG: ' + (homeTeam.sog || 0)}</div>
@@ -35,7 +35,7 @@ function displayGameDetailsHTML(data) {
                 
             </div>
 
-            <div class="flex-1 flex flex-col items-center md:items-end md:pr-4 min-w-0">
+            <div class="flex-1 flex flex-col items-center md:items-end md:pr-4 min-w-0 text-center md:text-right">
                 <a href="/team/${awayTeam.abbrev}" class="inline-block"><img src="https://assets.nhle.com/logos/nhl/svg/${awayTeam.abbrev}_light.svg" alt="${awayTeam.abbrev}" class="w-14 h-14 mb-2"></a>
                 <div class="text-lg font-bold text-gray-800 truncate break-any">${awayTeam.placeName?.default || awayTeam.abbrev}</div>
                 <div class="text-xs text-gray-500 mt-1">${isFutureGame ? (awayTeam.record || 'Record TBD') : 'SOG: ' + (awayTeam.sog || 0)}</div>
@@ -134,32 +134,20 @@ function displayGameDetailsHTML(data) {
                     <div class="bg-gray-50 rounded-lg p-4">
                         <div class="text-sm font-bold text-gray-600 uppercase mb-3">${category}</div>
                         <div class="grid grid-cols-2 gap-4">
-                            <!-- Home Leader -->
-                            <div class="flex items-center gap-3">
-                                <img src="https://assets.nhle.com/logos/nhl/svg/${homeTeam.abbrev}_light.svg" 
-                                     alt="${homeTeam.abbrev}" 
-                                     class="w-5 h-5 flex-shrink-0">
-                                  <a href="/player/${homeLeader.playerId || homeLeader.id || ''}" class="inline-block"><img src="${homeLeader.headshot}" alt="${homeLeader.name?.default}" 
-                                      class="w-10 h-10 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"></a>
-                                <div class="flex-1 min-w-0">
-                                    <div class="font-bold text-sm truncate">${homeLeader.name?.default || ''}</div>
-                                    <div class="text-xs text-gray-600">#${homeLeader.sweaterNumber} ${homeLeader.positionCode || ''}</div>
-                                    <div class="text-lg font-bold text-primary">${homeLeader.value || 0}</div>
-                                </div>
+                            <!-- Home Leader Card -->
+                            <div class="leader-card bg-white rounded-lg p-4 flex flex-col items-center text-center">
+                                <img src="${homeLeader.headshot}" alt="${homeLeader.name?.default}" class="leader-headshot w-16 h-16 rounded-full object-cover border-2 border-gray-200 mb-3">
+                                <div class="font-bold text-base break-any">${homeLeader.name?.default || ''}</div>
+                                <div class="text-xs text-gray-600">#${homeLeader.sweaterNumber} ${homeLeader.positionCode || ''}</div>
+                                <div class="text-lg font-extrabold text-primary mt-3">${homeLeader.value || 0}</div>
                             </div>
-                            
-                            <!-- Away Leader -->
-                            <div class="flex items-center gap-3">
-                                <img src="https://assets.nhle.com/logos/nhl/svg/${awayTeam.abbrev}_light.svg" 
-                                     alt="${awayTeam.abbrev}" 
-                                     class="w-5 h-5 flex-shrink-0">
-                                  <a href="/player/${awayLeader.playerId || awayLeader.id || ''}" class="inline-block"><img src="${awayLeader.headshot}" alt="${awayLeader.name?.default}" 
-                                      class="w-10 h-10 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"></a>
-                                <div class="flex-1 min-w-0">
-                                    <div class="font-bold text-sm truncate">${awayLeader.name?.default || ''}</div>
-                                    <div class="text-xs text-gray-600">#${awayLeader.sweaterNumber} ${awayLeader.positionCode || ''}</div>
-                                    <div class="text-lg font-bold text-primary">${awayLeader.value || 0}</div>
-                                </div>
+
+                            <!-- Away Leader Card -->
+                            <div class="leader-card bg-white rounded-lg p-4 flex flex-col items-center text-center">
+                                <img src="${awayLeader.headshot}" alt="${awayLeader.name?.default}" class="leader-headshot w-16 h-16 rounded-full object-cover border-2 border-gray-200 mb-3">
+                                <div class="font-bold text-base break-any">${awayLeader.name?.default || ''}</div>
+                                <div class="text-xs text-gray-600">#${awayLeader.sweaterNumber} ${awayLeader.positionCode || ''}</div>
+                                <div class="text-lg font-extrabold text-primary mt-3">${awayLeader.value || 0}</div>
                             </div>
                         </div>
                     </div>
@@ -202,25 +190,25 @@ function displayGameDetailsHTML(data) {
                             <div class="space-y-3">
                     `;
                     
+                    detailsHTML += `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">`;
                     homeGoalies.forEach(goalie => {
                         const savePct = goalie.savePctg ? (goalie.savePctg * 100).toFixed(1) : '0.0';
                         const gaa = goalie.gaa ? goalie.gaa.toFixed(2) : '0.00';
-                        
+
                         detailsHTML += `
-                            <div class="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
-                                <a href="/player/${goalie.playerId || goalie.id || ''}" class="inline-block"><img src="${goalie.headshot}" alt="${goalie.name?.default}" class="w-12 h-12 rounded-full object-cover border-2 border-gray-200"></a>
-                                <div class="flex-1 min-w-0">
-                                    <div class="font-bold text-sm">${goalie.name?.default || ''}</div>
-                                    <div class="text-xs text-gray-600">#${goalie.sweaterNumber} - ${goalie.record || '0-0-0'}</div>
-                                    <div class="flex gap-3 mt-1 text-xs text-gray-700">
-                                        <span><strong>${savePct}%</strong> SV%</span>
-                                        <span><strong>${gaa}</strong> GAA</span>
-                                        <span><strong>${goalie.shutouts || 0}</strong> SO</span>
-                                    </div>
+                            <div class="leader-card bg-white rounded-lg p-4 text-center">
+                                <a href="/player/${goalie.playerId || goalie.id || ''}" class="inline-block"><img src="${goalie.headshot}" alt="${goalie.name?.default}" class="leader-headshot w-16 h-16 rounded-full object-cover border-2 border-gray-200 mb-3"></a>
+                                <div class="font-bold text-base break-any">${goalie.name?.default || ''}</div>
+                                <div class="text-xs text-gray-600">#${goalie.sweaterNumber} - ${goalie.record || '0-0-0'}</div>
+                                <div class="flex items-center justify-center gap-4 mt-3 text-sm text-gray-700">
+                                    <div><strong>${savePct}%</strong><div class="text-xs">SV%</div></div>
+                                    <div><strong>${gaa}</strong><div class="text-xs">GAA</div></div>
+                                    <div><strong>${goalie.shutouts || 0}</strong><div class="text-xs">SO</div></div>
                                 </div>
                             </div>
                         `;
                     });
+                    detailsHTML += `</div>`;
                     
                     detailsHTML += `
                             </div>
@@ -241,26 +229,25 @@ function displayGameDetailsHTML(data) {
                             <div class="space-y-3">
                     `;
                     
+                    detailsHTML += `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">`;
                     awayGoalies.forEach(goalie => {
                         const savePct = goalie.savePctg ? (goalie.savePctg * 100).toFixed(1) : '0.0';
                         const gaa = goalie.gaa ? goalie.gaa.toFixed(2) : '0.00';
-                        
+
                         detailsHTML += `
-                            <div class="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
-                                  <a href="/player/${goalie.playerId || goalie.id || ''}" class="inline-block"><img src="${goalie.headshot}" alt="${goalie.name?.default}" 
-                                     class="w-12 h-12 rounded-full object-cover border-2 border-gray-200">
-                                <div class="flex-1 min-w-0">
-                                    <div class="font-bold text-sm">${goalie.name?.default || ''}</div>
-                                    <div class="text-xs text-gray-600">#${goalie.sweaterNumber} - ${goalie.record || '0-0-0'}</div>
-                                    <div class="flex gap-3 mt-1 text-xs text-gray-700">
-                                        <span><strong>${savePct}%</strong> SV%</span>
-                                        <span><strong>${gaa}</strong> GAA</span>
-                                        <span><strong>${goalie.shutouts || 0}</strong> SO</span>
-                                    </div>
+                            <div class="leader-card bg-white rounded-lg p-4 text-center">
+                                <a href="/player/${goalie.playerId || goalie.id || ''}" class="inline-block"><img src="${goalie.headshot}" alt="${goalie.name?.default}" class="leader-headshot w-16 h-16 rounded-full object-cover border-2 border-gray-200 mb-3"></a>
+                                <div class="font-bold text-base break-any">${goalie.name?.default || ''}</div>
+                                <div class="text-xs text-gray-600">#${goalie.sweaterNumber} - ${goalie.record || '0-0-0'}</div>
+                                <div class="flex items-center justify-center gap-4 mt-3 text-sm text-gray-700">
+                                    <div><strong>${savePct}%</strong><div class="text-xs">SV%</div></div>
+                                    <div><strong>${gaa}</strong><div class="text-xs">GAA</div></div>
+                                    <div><strong>${goalie.shutouts || 0}</strong><div class="text-xs">SO</div></div>
                                 </div>
                             </div>
                         `;
                     });
+                    detailsHTML += `</div>`;
                     
                     detailsHTML += `
                             </div>
