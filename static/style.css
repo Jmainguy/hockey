@@ -555,7 +555,10 @@
 }
 @media (max-width: 640px) {
     .leader-card { padding: 10px; }
-    .leader-card .leader-headshot { width: 56px; height: 56px; }
+    .leader-card { padding: 10px; background: transparent; border: none; box-shadow: none; }
+    .leader-card .leader-headshot { width: 72px; height: 72px; }
+    /* Remove boxed backgrounds inside game-details to use full-width space */
+    .game-details .bg-gray-50, .game-details .bg-white, .game-details .rounded-lg { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
 }
 
 .stat-item.career-best::after {
