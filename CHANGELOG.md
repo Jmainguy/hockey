@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.4](https://github.com/Jmainguy/hockey/compare/v1.6.3...v1.6.4) (2025-12-17)
+
+
+### Bug Fixes
+
+* more mobile enhancements ([6e7c7d8](https://github.com/Jmainguy/hockey/commit/6e7c7d8b688d13efe72c4ac81fa0e19821c906d5))
+
 ## [1.6.3](https://github.com/Jmainguy/hockey/compare/v1.6.2...v1.6.3) (2025-12-17)
 
 
