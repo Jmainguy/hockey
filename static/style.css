@@ -671,6 +671,22 @@ body.action-bg { background-size:cover; background-position:center; background-a
     .player-name { font-size:1.8rem; }
     .hero-career-summary { justify-content:flex-start; }
     .season-row-left { flex-wrap:wrap; }
+
+/* Scoring row grid to avoid name/score overlap */
+.scoring-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: start;
+}
+.scoring-row .time-score {
+    width: 72px;
+    text-align: right;
+    white-space: nowrap;
+}
+@media (max-width:420px) {
+    .scoring-row .time-score { width: 80px; }
+}
 }
 
 @media (max-width: 520px) {
