@@ -12,6 +12,15 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// helper to format a rank into a human-friendly label
+function formatRank(r) {
+    if (!r && r !== 0) return '';
+    if (r === 1) return 'Leader';
+    if (r === 2) return '2nd';
+    if (r === 3) return '3rd';
+    return `${r}th`;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // Get team ID from URL query parameter
     const params = new URLSearchParams(window.location.search);
@@ -155,17 +164,11 @@ function displayTeamDetails(team) {
     }
     
     // Display division with rank
-    const divisionRankText = team.divisionRank === 1 ? 'Leader' : 
-                            team.divisionRank === 2 ? '2nd' :
-                            team.divisionRank === 3 ? '3rd' :
-                            `${team.divisionRank}th`;
+    const divisionRankText = formatRank(team.divisionRank);
     document.getElementById('teamDivision').textContent = `${team.division.name} - ${divisionRankText}`;
-    
+
     // Display conference with rank
-    const conferenceRankText = team.conferenceRank === 1 ? 'Leader' : 
-                              team.conferenceRank === 2 ? '2nd' :
-                              team.conferenceRank === 3 ? '3rd' :
-                              `${team.conferenceRank}th`;
+    const conferenceRankText = formatRank(team.conferenceRank);
     document.getElementById('teamConference').textContent = `${team.conference.name} - ${conferenceRankText}`;
 
     // Header population handled by shared renderer above

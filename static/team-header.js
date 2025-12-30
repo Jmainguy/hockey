@@ -40,6 +40,14 @@
         if (!team) return;
         // ensure header exists
         buildHeader();
+        // helper to format a rank into a human-friendly label
+        const formatRank = (r) => {
+            if (!r && r !== 0) return '';
+            if (r === 1) return 'Leader';
+            if (r === 2) return '2nd';
+            if (r === 3) return '3rd';
+            return `${r}th`;
+        };
         const logoContainer = document.getElementById('teamLogoContainer');
         const teamNameEl = document.getElementById('teamName');
         const divisionEl = document.getElementById('teamDivision');
@@ -86,11 +94,11 @@
 
         // Show division/conference with ranks. If ranks are missing, compute them from /api/teams
         if (divisionEl && team.division && team.division.name) {
-            const dr = team.divisionRank ? (team.divisionRank === 1 ? 'Leader' : `${team.divisionRank}th`) : '';
+            const dr = team.divisionRank ? formatRank(team.divisionRank) : '';
             divisionEl.textContent = `${team.division.name}${dr ? ' - ' + dr : ''}`;
         }
         if (conferenceEl && team.conference && team.conference.name) {
-            const cr = team.conferenceRank ? (team.conferenceRank === 1 ? 'Leader' : `${team.conferenceRank}th`) : '';
+            const cr = team.conferenceRank ? formatRank(team.conferenceRank) : '';
             conferenceEl.textContent = `${team.conference.name}${cr ? ' - ' + cr : ''}`;
         }
 
@@ -119,8 +127,8 @@
                         });
                     const conferenceRank = conferenceTeams.findIndex(t => t.id === team.id) + 1;
 
-                    if (divisionEl) divisionEl.textContent = `${team.division.name} - ${divisionRank}th`;
-                    if (conferenceEl) conferenceEl.textContent = `${team.conference.name} - ${conferenceRank}th`;
+                    if (divisionEl) divisionEl.textContent = `${team.division.name} - ${formatRank(divisionRank)}`;
+                    if (conferenceEl) conferenceEl.textContent = `${team.conference.name} - ${formatRank(conferenceRank)}`;
                 } catch (e) {
                     // ignore
                 }
