@@ -25,6 +25,17 @@ function formatTime(isoString) {
     });
 }
 
+// Build status badge HTML. If `isIntermission` is true, use purple styling.
+function buildStatusBadge(isLiveOrCrit, isIntermission, stateText) {
+    if (isIntermission) {
+        return `<span class="inline-flex items-center gap-2 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold">${isLiveOrCrit ? '<span class="animate-pulse">🟣</span>' : ''} ${stateText}</span>`;
+    }
+    if (isLiveOrCrit) {
+        return `<span class="inline-flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-bold">${'<span class="animate-pulse">🔴</span>'} ${stateText}</span>`;
+    }
+    return `<span class="inline-flex items-center gap-2 px-3 py-1 bg-gray-50 text-gray-700 rounded-full text-sm font-semibold">${stateText}</span>`;
+}
+
 // Load games for the current date
 async function loadGames() {
     const dateStr = formatDate(currentDate);
@@ -51,6 +62,8 @@ async function loadGames() {
         
         if (data.gameWeek && data.gameWeek.length > 0) {
             displayGames(data.gameWeek);
+            // Start background updater for live clocks/scores
+            try { startScoresClockUpdater(10); } catch (e) {}
         } else {
             document.getElementById('noGames').classList.remove('hidden');
             document.getElementById('gamesGrid').innerHTML = '';
@@ -87,6 +100,61 @@ function displayGames(gameWeek) {
     allGames.forEach(game => {
         const gameCard = createGameCard(game);
         gamesGrid.appendChild(gameCard);
+
+        // For live games, immediately fetch the per-game landing to populate
+        // authoritative clock/period info so the card shows intermission/time right away.
+        if (game.gameState === 'LIVE' || game.gameState === 'CRIT') {
+            const statusEl = document.getElementById(`gameStatus-${game.id}`);
+            if (statusEl) {
+                statusEl.innerHTML = `<span class="inline-flex items-center gap-2 px-3 py-1 bg-red-50 text-red-700 rounded-full text-sm font-semibold"><span class="animate-pulse">🔴</span> Loading…</span>`;
+            }
+            (async () => {
+                try {
+                    const homeScoreEl = document.getElementById(`homeScore-${game.id}`);
+                    const awayScoreEl = document.getElementById(`awayScore-${game.id}`);
+                    const resp = await fetch(`/api/gamecenter/${game.id}/landing`);
+                    if (!resp.ok) return;
+                    const landing = await resp.json();
+                    // update scores
+                    if (homeScoreEl) homeScoreEl.textContent = String(landing.homeTeam?.score || game.homeTeam.score || 0);
+                    if (awayScoreEl) awayScoreEl.textContent = String(landing.awayTeam?.score || game.awayTeam.score || 0);
+
+                    // compute clock text
+                    const pd = landing.periodDescriptor || game.periodDescriptor || {};
+                    const periodType = pd.periodType || '';
+                    const periodNum = pd.number || '';
+                    const clockObj = landing.clock || {};
+                    const isIntermission = !!clockObj.inIntermission;
+                    let clockText = '';
+                    const secs = (typeof clockObj.secondsRemaining === 'number' && !isNaN(clockObj.secondsRemaining)) ? clockObj.secondsRemaining : null;
+                    if (typeof secs === 'number') {
+                        const mins = Math.floor(secs / 60);
+                        const s = Math.floor(secs % 60).toString().padStart(2, '0');
+                        clockText = `${mins}:${s}`;
+                    } else {
+                        clockText = clockObj.timeRemaining || clockObj.TimeRemaining || landing.clockText || '';
+                    }
+
+                    let stateText = '';
+                    if (isIntermission) {
+                        if (clockText) stateText = periodNum ? `Intermission ${periodNum} • ${clockText}` : `Intermission • ${clockText}`;
+                        else stateText = periodNum ? `Intermission ${periodNum}` : `Intermission`;
+                    } else if (clockText) {
+                        stateText = `${periodType} ${periodNum} • ${clockText}`.trim();
+                    } else if (periodType || periodNum) {
+                        stateText = `${periodType} ${periodNum}`.trim();
+                    } else {
+                        stateText = 'Live';
+                    }
+
+                    if (statusEl) {
+                        statusEl.innerHTML = buildStatusBadge(landing.gameState === 'LIVE' || landing.gameState === 'CRIT', isIntermission, stateText);
+                    }
+                } catch (e) {
+                    // ignore per-card failures
+                }
+            })();
+        }
     });
 }
 
@@ -136,16 +204,30 @@ function createGameCard(game) {
             </div>
         `;
     } else if (gameState === 'LIVE' || gameState === 'CRIT') {
-        // Live game - prefer clock.timeRemaining and show period number/type
+        // Live game - prefer clock.secondsRemaining and show period number/type
         const pd = game.periodDescriptor || {};
         const periodType = pd.periodType || '';
         const periodNum = pd.number || '';
         const clockObj = game.clock || {};
         const isIntermission = !!clockObj.inIntermission;
-        const clock = clockObj.timeRemaining || clockObj.TimeRemaining || '';
+        // Prefer numeric secondsRemaining as the authoritative source
+        let clock = '';
+        const secs = (typeof clockObj.secondsRemaining === 'number' && !isNaN(clockObj.secondsRemaining)) ? clockObj.secondsRemaining : null;
+        if (typeof secs === 'number') {
+            const mins = Math.floor(secs / 60);
+            const s = Math.floor(secs % 60).toString().padStart(2, '0');
+            clock = `${mins}:${s}`;
+        } else {
+            clock = clockObj.timeRemaining || clockObj.TimeRemaining || game.clockText || '';
+        }
         let stateText = '';
         if (isIntermission) {
-            stateText = `Intermission${periodNum ? ' • ' + (periodNum) : ''}`;
+            // Prefer showing intermission and the intermission clock when available
+            if (clock) {
+                stateText = periodNum ? `Intermission ${periodNum} • ${clock}` : `Intermission • ${clock}`;
+            } else {
+                stateText = periodNum ? `Intermission ${periodNum}` : `Intermission`;
+            }
         } else if (clock) {
             stateText = `${periodType} ${periodNum} • ${clock}`.trim();
         } else if (periodType || periodNum) {
@@ -154,17 +236,15 @@ function createGameCard(game) {
             stateText = 'Live';
         }
         statusHTML = `
-            <div class="text-center mb-2">
-                <span class="inline-flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-bold">
-                    <span class="animate-pulse">🔴</span> ${stateText}
-                </span>
+            <div id="gameStatus-${game.id}" class="text-center mb-2">
+                ${buildStatusBadge(true, isIntermission, stateText)}
             </div>
         `;
         scoreHTML = `
             <div class="flex items-center justify-center gap-8 py-4">
-                <div class="text-5xl font-bold ${homeTeam.score > awayTeam.score ? 'text-primary' : 'text-gray-400'}">${homeTeam.score || 0}</div>
+                <div class="text-5xl font-bold ${homeTeam.score > awayTeam.score ? 'text-primary' : 'text-gray-400'}"><span id="homeScore-${game.id}">${homeTeam.score || 0}</span></div>
                 <div class="text-2xl font-bold text-gray-400">-</div>
-                <div class="text-5xl font-bold ${awayTeam.score > homeTeam.score ? 'text-primary' : 'text-gray-400'}">${awayTeam.score || 0}</div>
+                <div class="text-5xl font-bold ${awayTeam.score > homeTeam.score ? 'text-primary' : 'text-gray-400'}"><span id="awayScore-${game.id}">${awayTeam.score || 0}</span></div>
             </div>
         `;
     } else if (gameState === 'OFF' || gameState === 'FINAL') {
@@ -257,29 +337,148 @@ function showError(message) {
 // Navigation handlers
 document.getElementById('prevDay').addEventListener('click', () => {
     currentDate.setDate(currentDate.getDate() - 1);
+    try { stopScoresClockUpdater(); } catch (e) {}
     loadGames();
 });
 
 document.getElementById('nextDay').addEventListener('click', () => {
     currentDate.setDate(currentDate.getDate() + 1);
+    try { stopScoresClockUpdater(); } catch (e) {}
     loadGames();
 });
 
 document.getElementById('todayBtn').addEventListener('click', () => {
     currentDate = new Date();
+    try { stopScoresClockUpdater(); } catch (e) {}
     loadGames();
+});
+
+window.addEventListener('beforeunload', () => {
+    try { stopScoresClockUpdater(); } catch (e) {}
 });
 
 // Load games on page load
 loadGames();
+// Ensure background updater is running; start after initial load as well
+try { startScoresClockUpdater(10); } catch (e) {}
 
-// Auto-refresh every 30 seconds for live games
-setInterval(() => {
-    const gamesGrid = document.getElementById('gamesGrid');
-    if (gamesGrid && !gamesGrid.classList.contains('hidden')) {
-        loadGames();
+// Background poller: fetch schedule for the current date and update live clocks/scores
+async function updateScoresClocks() {
+    try {
+        const dateStr = formatDate(currentDate);
+        const resp = await fetch(`/api/schedule/${dateStr}`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (!data || !data.gameWeek) return;
+
+        // Find games for the date
+        const games = [];
+        data.gameWeek.forEach(day => {
+            if (day.date === dateStr && day.games && day.games.length > 0) games.push(...day.games);
+        });
+
+        for (const game of games) {
+            const statusEl = document.getElementById(`gameStatus-${game.id}`);
+            const homeScoreEl = document.getElementById(`homeScore-${game.id}`);
+            const awayScoreEl = document.getElementById(`awayScore-${game.id}`);
+
+            // Update scores if present
+            if (homeScoreEl) homeScoreEl.textContent = String(game.homeTeam.score || 0);
+            if (awayScoreEl) awayScoreEl.textContent = String(game.awayTeam.score || 0);
+
+            if (!statusEl) continue;
+
+            // Recompute state text (same logic as createGameCard)
+            const pd = game.periodDescriptor || {};
+            const periodType = pd.periodType || '';
+            let periodNum = pd.number || '';
+            const clockObj = game.clock || {};
+            let isIntermission = !!clockObj.inIntermission;
+            let secs = (typeof clockObj.secondsRemaining === 'number') ? clockObj.secondsRemaining : null;
+            let clockText = clockObj.timeRemaining || clockObj.TimeRemaining || game.clockText || '';
+
+            // If the schedule payload doesn't include clock info for a live game,
+            // fetch the per-game landing payload which contains authoritative clock fields.
+            if ((game.gameState === 'LIVE' || game.gameState === 'CRIT')) {
+                try {
+                    const landingResp = await fetch(`/api/gamecenter/${game.id}/landing`);
+                    if (landingResp && landingResp.ok) {
+                        const landing = await landingResp.json();
+                        const lsecs = landing?.clock?.secondsRemaining;
+                        const lin = landing?.clock?.inIntermission;
+                        if (typeof lsecs === 'number' && !isNaN(lsecs)) {
+                            secs = lsecs;
+                            const mins = Math.floor(secs / 60);
+                            const s = Math.floor(secs % 60).toString().padStart(2, '0');
+                            clockText = `${mins}:${s}`;
+                        } else if (landing.clockText && String(landing.clockText).trim() !== '') {
+                            clockText = landing.clockText;
+                        }
+                        if (landing?.periodDescriptor) {
+                            periodNum = (typeof landing.periodDescriptor.number === 'number') ? landing.periodDescriptor.number : periodNum;
+                            if (landing.periodDescriptor.periodType) {
+                                // prefer landing's periodType when provided
+                                // (helps avoid showing REG when intermission is true)
+                                // assign local variable for later formatting
+                                // periodType variable is block-scoped; recreate below if needed
+                            }
+                        }
+                        // Update intermission flag from landing if present
+                        if (typeof lin === 'boolean') {
+                            // override schedule-provided inIntermission with landing value
+                            // assign to local isIntermission variable
+                            // (we declared isIntermission above; reassign it here)
+                            // eslint-disable-next-line no-unused-vars
+                            isIntermission = lin;
+                        }
+                    }
+                } catch (e) {
+                    // ignore per-game fetch failures; fall back to schedule values
+                }
+            }
+
+            let stateText = '';
+            if (isIntermission) {
+                if (clockText) {
+                    stateText = periodNum ? `Intermission ${periodNum} • ${clockText}` : `Intermission • ${clockText}`;
+                } else {
+                    stateText = periodNum ? `Intermission ${periodNum}` : `Intermission`;
+                }
+            } else if (clockText) {
+                stateText = `${periodType} ${periodNum} • ${clockText}`.trim();
+            } else if (periodType || periodNum) {
+                stateText = `${periodType} ${periodNum}`.trim();
+            } else if (game.gameState === 'LIVE' || game.gameState === 'CRIT') {
+                stateText = 'Live';
+            } else if (game.gameState === 'FINAL' || game.gameState === 'OFF') {
+                stateText = 'Final';
+            }
+
+            // Update badge inner HTML while preserving outer wrapper
+            statusEl.innerHTML = buildStatusBadge(game.gameState === 'LIVE' || game.gameState === 'CRIT', isIntermission, stateText);
+        }
+    } catch (e) {
+        // ignore transient errors
     }
-}, 30000);
+}
+
+function startScoresClockUpdater(intervalSec = 10) {
+    try {
+        stopScoresClockUpdater();
+        // immediate update
+        updateScoresClocks();
+        window.__scoresClocksInterval = setInterval(updateScoresClocks, intervalSec * 1000);
+    } catch (e) {}
+}
+
+function stopScoresClockUpdater() {
+    try {
+        if (window.__scoresClocksInterval) {
+            clearInterval(window.__scoresClocksInterval);
+            window.__scoresClocksInterval = null;
+        }
+    } catch (e) {}
+}
 
 // Show game details in a modal
 async function showGameDetails(game) {

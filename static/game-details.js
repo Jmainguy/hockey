@@ -1,5 +1,111 @@
 // Shared game details display functionality
 
+// Return true when the landing payload represents a finished game.
+function isGameFinal(data) {
+    try {
+        if (!data) return false;
+        // Preferred indicator from explicit gameState when available
+        if (data.gameState && String(data.gameState).toUpperCase().startsWith('FINAL')) return true;
+        // Fallback: if status text suggests finality
+        const st = (data.statusText || '').toString().toLowerCase();
+        if (st === 'final' || st === 'final overtime' || st === 'final ot') return true;
+        // If the API returns secondsRemaining === 0 and the game is not LIVE, treat as final
+        const secs = data?.clock?.secondsRemaining;
+        if (typeof secs === 'number' && secs === 0 && String(data.gameState || '').toUpperCase() !== 'LIVE') return true;
+    } catch (e) {
+        // fall through
+    }
+    return false;
+}
+
+// Radio player helpers
+function ensureRadioAudio() {
+    try {
+        if (!window.__radioAudio) {
+            const audio = document.createElement('audio');
+            audio.id = 'gameRadioAudio';
+            audio.preload = 'none';
+            audio.controls = false;
+            audio.autoplay = false;
+            audio.crossOrigin = 'anonymous';
+            document.body.appendChild(audio);
+            window.__radioAudio = audio;
+            window.__currentRadioGame = null;
+        }
+        return window.__radioAudio;
+    } catch (e) { return null; }
+}
+
+function toggleRadioForGame(game) {
+    // Deprecated wrapper: prefer toggleRadioForSide
+    toggleRadioForSide(game, 'home');
+}
+
+function toggleRadioForSide(game, side) {
+    try {
+        const src = (side === 'home') ? (game?.homeTeam?.radioLink || null) : (game?.awayTeam?.radioLink || null);
+        if (!src) return;
+        const audio = ensureRadioAudio();
+        if (!audio) return;
+        const btnId = (side === 'home') ? 'radioHome' : 'radioAway';
+        // If same game and same side currently playing, toggle pause/play
+        if (window.__currentRadioGame === game.id && window.__currentRadioSide === side) {
+            if (audio.paused) {
+                audio.play().then(() => updateRadioToggleButton(true, btnId)).catch(() => {
+                    updateRadioToggleButton(false, btnId);
+                    try { window.open(src, '_blank'); } catch (e) {}
+                });
+            } else {
+                audio.pause();
+                updateRadioToggleButton(false, btnId);
+            }
+            return;
+        }
+        // Otherwise switch source
+        try { audio.pause(); } catch (e) {}
+        audio.src = src;
+        audio.play().then(() => {
+            window.__currentRadioGame = game.id;
+            window.__currentRadioSide = side;
+            updateRadioToggleButton(true, btnId);
+            // reset other team's button label
+            const otherBtn = document.getElementById(side === 'home' ? 'radioAway' : 'radioHome');
+            if (otherBtn) otherBtn.textContent = '▶ Listen';
+        }).catch(() => {
+            // Playback failed (often due to unsupported HLS in <audio> or CORS); open stream in a new tab as fallback
+            updateRadioToggleButton(false, btnId);
+            try { window.open(src, '_blank'); } catch (e) {}
+        });
+    } catch (e) {}
+}
+
+function updateRadioToggleButton(isPlaying, btnId) {
+    try {
+        const btn = document.getElementById(btnId || 'radioHome');
+        if (!btn) return;
+        btn.textContent = isPlaying ? '⏸ Pause' : '▶ Listen';
+    } catch (e) {}
+}
+
+function wireRadioToggle(game) {
+    try {
+        const btnHome = document.getElementById('radioHome');
+        if (btnHome) {
+            btnHome.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleRadioForSide(game, 'home');
+            });
+        }
+        const btnAway = document.getElementById('radioAway');
+        if (btnAway) {
+            btnAway.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleRadioForSide(game, 'away');
+            });
+        }
+    } catch (e) {}
+}
+
 function displayGameDetailsHTML(data) {
     const awayTeam = data.awayTeam;
     const homeTeam = data.homeTeam;
@@ -10,6 +116,69 @@ function displayGameDetailsHTML(data) {
 
 
     const isFutureGame = data.gameState === 'FUT' || data.gameState === 'PRE';
+
+    // Prepare a cache for three-star names so hydrated full names survive re-renders
+    try {
+        if (typeof window !== 'undefined') {
+            window.__threeStarNameCache = window.__threeStarNameCache || {};
+        }
+    } catch (e) {}
+
+    // Compute a displayable clock and period text from data so the rendered
+    // scoreboard contains the current values immediately (prevents flashes).
+    let initialClock = '';
+    let initialPeriodText = '';
+    try {
+        const secs = data?.clock?.secondsRemaining;
+        const inIntermission = data?.clock?.inIntermission;
+        const periodNum = data?.periodDescriptor?.number;
+        if (typeof secs === 'number' && !isNaN(secs)) {
+            const mins = Math.floor(secs / 60);
+            const s = Math.floor(secs % 60).toString().padStart(2, '0');
+            initialClock = `${mins}:${s}`;
+            if (inIntermission) {
+                initialPeriodText = periodNum ? `Intermission ${periodNum}` : 'Intermission';
+            } else if (data.gameState === 'LIVE' && periodNum) {
+                initialPeriodText = `Period ${periodNum}`;
+            }
+        } else {
+            initialClock = data.clockText || '';
+            if (data.clock?.inIntermission) {
+                const p = data?.periodDescriptor?.number;
+                initialPeriodText = p ? `Intermission ${p}` : 'Intermission';
+            } else if (data.periodDescriptor && data.gameState === 'LIVE') {
+                const p = data.periodDescriptor.number;
+                if (p) initialPeriodText = `Period ${p}`;
+            }
+        }
+    } catch (e) {
+        initialClock = data.clockText || '';
+    }
+    // If the game is final, don't show any clock or period
+    try {
+        if (isGameFinal(data)) {
+            initialClock = '';
+            initialPeriodText = '';
+        } else {
+            // If we didn't compute a clock/period from this payload, preserve any
+            // existing values already shown in the DOM (prevents flashes when the
+            // API returns an empty clock during a subsequent poll).
+            if ((!initialClock || String(initialClock).trim() === '') && typeof document !== 'undefined') {
+                const existing = document.getElementById('gameClock');
+                if (existing && existing.textContent && String(existing.textContent).trim() !== '') {
+                    initialClock = existing.textContent;
+                }
+            }
+            if ((!initialPeriodText || String(initialPeriodText).trim() === '') && typeof document !== 'undefined') {
+                const existingP = document.getElementById('gamePeriod');
+                if (existingP && existingP.textContent && String(existingP.textContent).trim() !== '') {
+                    initialPeriodText = existingP.textContent;
+                }
+            }
+        }
+    } catch (e) {
+        // ignore DOM access errors
+    }
 
     // prettier game summary header: left team / score center / right team
     let statusText = 'Final';
@@ -31,6 +200,7 @@ let detailsHTML = `
                      alt="${homeTeam.abbrev}"
                      class="w-14 h-14 mb-1">
             </a>
+            ${ homeTeam.radioLink ? `<div class="mt-1"><button id="radioHome" class="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-sm font-semibold">▶ Listen</button></div>` : '' }
             <div class="text-sm font-semibold text-gray-800 text-center">
                 ${teamName(homeTeam)}
             </div>
@@ -41,6 +211,9 @@ let detailsHTML = `
 
         <!-- Score -->
         <div class="flex flex-col items-center min-w-[90px]">
+            <div class="text-center mb-2">
+                    ${ (data && data.gameState && String(data.gameState).toUpperCase().startsWith('FINAL')) ? '' : (`<div id="gameClock" class="scoreboard-clock text-2xl md:text-3xl font-extrabold text-gray-800">${initialClock}</div>` + (initialPeriodText ? `<div id="gamePeriod" class="text-sm text-gray-500 mt-1">${initialPeriodText}</div>` : `<div id="gamePeriod" class="text-sm text-gray-500 mt-1"></div>`)) }
+                </div>
             <div class="flex items-center gap-2">
                 <span class="text-4xl font-extrabold text-gray-900">${homeTeam.score || 0}</span>
                 <span class="text-xl font-bold text-gray-400">–</span>
@@ -51,10 +224,7 @@ let detailsHTML = `
                 <span class="text-xs font-semibold ${statusClass} px-2 py-0.5 rounded-full">
                     ${statusText}
                 </span>
-                ${statusText === 'Live' && periodInfo
-                    ? `<span class="text-xs text-gray-400 px-2 py-0.5 bg-gray-100 rounded">${periodInfo}</span>`
-                    : ''
-                }
+                
             </div>
         </div>
 
@@ -65,6 +235,7 @@ let detailsHTML = `
                      alt="${awayTeam.abbrev}"
                      class="w-14 h-14 mb-1">
             </a>
+            ${ awayTeam.radioLink ? `<div class="mt-1"><button id="radioAway" class="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-sm font-semibold">▶ Listen</button></div>` : '' }
             <div class="text-sm font-semibold text-gray-800 text-center">
                 ${teamName(awayTeam)}
             </div>
@@ -335,15 +506,23 @@ let detailsHTML = `
             const playerId = player.playerId || player.id || null;
             const teamAbbrev = (player.teamAbbrev && player.teamAbbrev.default) ? player.teamAbbrev.default : (player.teamAbbrev || '');
             const headshot = player.headshot || '';
-            
+            // Use cached hydrated name if available so re-renders keep full names
+            let displayName = fullName;
+            try {
+                if (typeof window !== 'undefined' && window.__threeStarNameCache && playerId) {
+                    const cached = window.__threeStarNameCache[playerId];
+                    if (cached && String(cached).trim() !== '') displayName = cached;
+                }
+            } catch (e) {}
+
             detailsHTML += `
                 <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 flex items-center gap-3">
                     <div class="text-3xl">${starEmoji}</div>
                     <a href="/player/${playerId || ''}" class="block flex-shrink-0">
-                      <img src="${headshot}" alt="${fullName}" class="w-12 h-12 rounded-full object-cover">
+                      <img src="${headshot}" alt="${displayName}" class="w-12 h-12 rounded-full object-cover">
                     </a>
                     <div class="flex-1 min-w-0">
-                        <div class="font-bold text-sm"><a id="threeStarName-${playerId || ''}" href="/player/${playerId || ''}" class="underline">${fullName}</a></div>
+                        <div class="font-bold text-sm"><a id="threeStarName-${playerId || ''}" href="/player/${playerId || ''}" class="underline">${displayName}</a></div>
                         <div class="text-xs text-gray-600">${teamAbbrev} #${player.sweaterNo}</div>
                         <div class="text-xs text-gray-500">${stats}</div>
                     </div>
@@ -577,15 +756,21 @@ let detailsHTML = `
     return detailsHTML;
 }
 
-// Hydrate abbreviated three-stars names by fetching player details
+// Hydrate abbreviated three-stars names by fetching player details and cache them
 async function hydrateThreeStarNames() {
     try {
+        window.__threeStarNameCache = window.__threeStarNameCache || {};
         const anchors = Array.from(document.querySelectorAll('[id^="threeStarName-"]'));
         if (!anchors || anchors.length === 0) return;
         for (const a of anchors) {
             try {
                 const id = a.id.replace('threeStarName-', '') || a.getAttribute('href').split('/').pop();
                 if (!id) continue;
+                // If cached, reuse it
+                if (window.__threeStarNameCache[id]) {
+                    a.textContent = window.__threeStarNameCache[id];
+                    continue;
+                }
                 const resp = await fetch(`/api/player/${id}`);
                 if (!resp.ok) continue;
                 const data = await resp.json();
@@ -594,10 +779,103 @@ async function hydrateThreeStarNames() {
                 const display = (first || last) ? `${first} ${last}`.trim() : (data.playerName || data.playerName?.default || '');
                 if (display && display.length > 0) {
                     a.textContent = display;
+                    window.__threeStarNameCache[id] = display;
                 }
             } catch (e) { /* ignore individual failures */ }
         }
     } catch (e) { /* ignore */ }
+}
+
+// Polling helper: periodically refetch the landing endpoint and re-render the page
+async function fetchAndRenderGameLanding(gameId) {
+    try {
+        const resp = await fetch(`/api/gamecenter/${gameId}/landing`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+
+        // Render main HTML first so elements exist
+        const mainEl = document.getElementById('gameInner');
+        if (mainEl) {
+            mainEl.innerHTML = displayGameDetailsHTML(data);
+            try { renderGameVideos(gameId); } catch (e) { /* ignore */ }
+            try { hydrateThreeStarNames(); } catch (e) { /* ignore */ }
+            try { if (typeof wireRadioToggle === 'function') wireRadioToggle(data); } catch (e) { }
+        }
+
+        // Update clock and period elements without clearing existing values when payload lacks them
+        const clockEl = document.getElementById('gameClock');
+        const periodEl = document.getElementById('gamePeriod');
+        const clockContainer = clockEl ? clockEl.parentElement : null;
+        let displayClock = '';
+        let displayPeriod = '';
+        try {
+            const secs = data?.clock?.secondsRemaining;
+            const inIntermission = data?.clock?.inIntermission;
+            const periodNum = data?.periodDescriptor?.number;
+            if (typeof secs === 'number' && !isNaN(secs)) {
+                const mins = Math.floor(secs / 60);
+                const s = Math.floor(secs % 60).toString().padStart(2, '0');
+                displayClock = `${mins}:${s}`;
+                if (inIntermission) displayPeriod = periodNum ? `Intermission ${periodNum}` : 'Intermission';
+                else if (data.gameState === 'LIVE' && periodNum) displayPeriod = `Period ${periodNum}`;
+            } else {
+                displayClock = data.clockText || '';
+                if (data.clock?.inIntermission) displayPeriod = data?.periodDescriptor?.number ? `Intermission ${data.periodDescriptor.number}` : 'Intermission';
+                else if (data.periodDescriptor && data.gameState === 'LIVE') displayPeriod = data.periodDescriptor.number ? `Period ${data.periodDescriptor.number}` : '';
+            }
+        } catch (e) {
+            displayClock = data.clockText || '';
+        }
+
+        if (clockEl) {
+            if (displayClock && String(displayClock).trim() !== '') {
+                clockEl.textContent = displayClock;
+            }
+        }
+        if (periodEl) {
+            if (displayPeriod && String(displayPeriod).trim() !== '') {
+                periodEl.textContent = displayPeriod;
+            }
+        }
+
+        // Hide the clock container entirely when the game is final; otherwise show it
+        try {
+            const isFinal = isGameFinal(data);
+            if (clockContainer) {
+                // remove container entirely for finals to avoid showing 0:00
+                clockContainer.style.display = isFinal ? 'none' : '';
+            }
+            if (isFinal && periodEl) {
+                periodEl.textContent = '';
+            }
+            // If not final but there's no clock text at all, ensure we don't show a misleading 0:00
+            if (!isFinal && clockEl && String(clockEl.textContent || '').trim() === '0:00') {
+                // Replace with empty if upstream indicates no running clock
+                const hasClockInfo = (data && ((typeof data.clock?.secondsRemaining === 'number' && !isNaN(data.clock.secondsRemaining)) || (data.clockText && String(data.clockText).trim() !== '')));
+                if (!hasClockInfo) clockEl.textContent = '';
+            }
+        } catch (e) { /* ignore DOM errors */ }
+    } catch (e) {
+        // ignore transient failures
+    }
+}
+
+function startPollingGameLanding(gameId, intervalSec = 10) {
+    try {
+        stopPollingGameLanding();
+        // Immediately fetch and render once
+        fetchAndRenderGameLanding(gameId);
+        window.__gameLandingPollInterval = setInterval(() => fetchAndRenderGameLanding(gameId), intervalSec * 1000);
+    } catch (e) {
+        // ignore
+    }
+}
+
+function stopPollingGameLanding() {
+    if (window.__gameLandingPollInterval) {
+        clearInterval(window.__gameLandingPollInterval);
+        window.__gameLandingPollInterval = null;
+    }
 }
 
 // Fetch and render game videos (Condensed + Recap only)
