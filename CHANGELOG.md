@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.8.0](https://github.com/Jmainguy/hockey/compare/v1.7.0...v1.8.0) (2026-01-03)
+
+
+### Features
+
+* add radio links and clock ([66ef606](https://github.com/Jmainguy/hockey/commit/66ef6065311dfe5559bb4d6f9d23fd1739bb8b6c))
+
+
+### Bug Fixes
+
+* standings indicator for schedule page ([96f013f](https://github.com/Jmainguy/hockey/commit/96f013f42330b35a0721fccbcae1fd2aefb565b5))
+
 ## [1.7.0](https://github.com/Jmainguy/hockey/compare/v1.6.0...v1.7.0) (2025-12-17)
 
 
