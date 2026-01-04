@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.9.0](https://github.com/Jmainguy/hockey/compare/v1.8.0...v1.9.0) (2026-01-04)
+
+
+### Features
+
+* add redis caching ([00e224b](https://github.com/Jmainguy/hockey/commit/00e224b77ee9edc0b40ed9120e10d6a707c3c8c2))
+
+
+### Bug Fixes
+
+* winnipeg no longer maps to njd ([b673585](https://github.com/Jmainguy/hockey/commit/b673585bf660f4823e8f0b374c369c166f57c763))
+
 ## [1.8.0](https://github.com/Jmainguy/hockey/compare/v1.7.0...v1.8.0) (2026-01-03)
 
 
