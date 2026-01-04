@@ -185,6 +185,7 @@ var (
 		20: "CGY", 21: "COL", 22: "EDM", 23: "VAN",
 		24: "ANA", 25: "DAL", 26: "LAK", 28: "SJS",
 		29: "CBJ", 30: "MIN", 31: "VGK", 32: "SEA", 33: "UTA",
+		52: "WPG",
 	}
 
 	// Map team names to abbreviations for enriching player season data
@@ -364,18 +365,27 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 
 	// Convert team ID to abbreviation
 	var teamAbbr string
-	teamIDInt := 1
+	teamIDInt := -1
+	// If teamId is numeric, use that id
 	if _, err := fmt.Sscanf(teamId, "%d", &teamIDInt); err != nil {
-		// If not an int, treat as abbreviation
+		// Not numeric: treat as abbreviation (e.g., "wpg")
 		teamAbbr = strings.ToUpper(teamId)
 		if id, ok := abbrevToTeamID[teamAbbr]; ok {
 			teamIDInt = id
+		} else {
+			// Leave teamIDInt as -1 to indicate we don't have a numeric id;
+			// we'll rely on the provided abbreviation when searching standings below.
+			teamIDInt = -1
 		}
 	}
-	if abbr, ok := teamIDToAbbr[teamIDInt]; ok {
-		teamAbbr = abbr
-	} else {
-		return nil, fmt.Errorf("unknown team id: %s", teamId)
+
+	// If we resolved a numeric ID, derive the canonical abbreviation from it
+	if teamIDInt != -1 {
+		if abbr, ok := teamIDToAbbr[teamIDInt]; ok {
+			teamAbbr = abbr
+		} else {
+			return nil, fmt.Errorf("unknown team id: %s", teamId)
+		}
 	}
 
 	// Fetch standings data using date-based endpoint
@@ -441,8 +451,12 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 	}
 
 	for _, standing := range standingsResp.Standings {
-		if standing.TeamAbbrev.Default == teamAbbr {
+		if standing.TeamAbbrev.Default == teamAbbr || strings.EqualFold(standing.TeamAbbrev.Default, strings.ToUpper(teamId)) {
 			// Build complete team details from standings
+			// Populate numeric ID from standings where possible
+			if id, ok := abbrevToTeamID[standing.TeamAbbrev.Default]; ok {
+				team.ID = id
+			}
 			team.Name = standing.TeamName.Default
 			team.TeamName = standing.TeamCommonName.Default
 			team.LocationName = standing.TeamName.Default
