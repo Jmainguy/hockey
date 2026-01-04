@@ -7,31 +7,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
 )
-
-// simple in-memory cache for team news
-var teamNewsCache = struct {
-	sync.RWMutex
-	m map[string]cacheEntry
-}{m: map[string]cacheEntry{}}
-
-// separate cache for transactions
-var teamTransactionsCache = struct {
-	sync.RWMutex
-	m map[string]cacheEntry
-}{m: map[string]cacheEntry{}}
-
-type cacheEntry struct {
-	resp interface{}
-	ts   time.Time
-}
-
-// cache TTL
-const teamNewsTTL = 2 * time.Minute
 
 type TeamNewsStory struct {
 	Title       string `json:"title"`
@@ -59,21 +38,8 @@ func handleAPITeamNews(w http.ResponseWriter, r *http.Request) {
 			teamId = strconv.Itoa(id)
 		}
 	}
-	// Check cache first
-	teamNewsCache.RLock()
-	if e, ok := teamNewsCache.m[teamId]; ok {
-		if time.Since(e.ts) < teamNewsTTL {
-			teamNewsCache.RUnlock()
-			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(e.resp); err != nil {
-				fmt.Printf("error encoding cached team news response: %v\n", err)
-				http.Error(w, "Encoding error", http.StatusInternalServerError)
-				return
-			}
-			return
-		}
-	}
-	teamNewsCache.RUnlock()
+
+	cacheKey := fmt.Sprintf("team-news:%s", teamId)
 
 	// Build the Forge DAPI URL for team news
 	apiUrl := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-us/stories?tags.slug=teamid-%s&$limit=10", teamId)
@@ -88,22 +54,19 @@ func handleAPITeamNews(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// If upstream rate-limits us, return cached response if available
+	// If upstream rate-limits us, try Redis
 	if resp.StatusCode == http.StatusTooManyRequests {
-		teamNewsCache.RLock()
-		if e, ok := teamNewsCache.m[teamId]; ok {
-			if time.Since(e.ts) < 10*teamNewsTTL {
-				teamNewsCache.RUnlock()
-				w.Header().Set("Content-Type", "application/json")
-				if err := json.NewEncoder(w).Encode(e.resp); err != nil {
-					fmt.Printf("error encoding cached team news response (rate-limited): %v\n", err)
-					http.Error(w, "Encoding error", http.StatusInternalServerError)
-					return
-				}
-				return
+		if cachedData, cacheErr := getCachedRaw(cacheKey); cacheErr == nil {
+			fmt.Printf("Upstream 429 for team news %s, using Redis cache\n", teamId)
+			w.Header().Set("Content-Type", "application/json")
+			if _, writeErr := w.Write(cachedData); writeErr != nil {
+				fmt.Printf("error writing cached team news response: %v\n", writeErr)
+				http.Error(w, "Encoding error", http.StatusInternalServerError)
 			}
+			return
+		} else {
+			fmt.Printf("No cached team news for %s in Redis: %v\n", teamId, cacheErr)
 		}
-		teamNewsCache.RUnlock()
 		http.Error(w, "Upstream rate limited", http.StatusBadGateway)
 		return
 	}
@@ -137,10 +100,12 @@ func handleAPITeamNews(w http.ResponseWriter, r *http.Request) {
 
 	respObj := TeamNewsResponse{Stories: stories}
 
-	// Cache successful response
-	teamNewsCache.Lock()
-	teamNewsCache.m[teamId] = cacheEntry{resp: respObj, ts: time.Now()}
-	teamNewsCache.Unlock()
+	// Cache successful response in Redis
+	if cacheData, jsonErr := json.Marshal(respObj); jsonErr == nil {
+		if setErr := setCachedRaw(cacheKey, cacheData, time.Hour); setErr != nil {
+			fmt.Printf("Failed to cache team news for %s: %v\n", teamId, setErr)
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(respObj); err != nil {
@@ -162,21 +127,7 @@ func handleAPITeamTransactions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check cache first
-	teamTransactionsCache.RLock()
-	if e, ok := teamTransactionsCache.m[teamId]; ok {
-		if time.Since(e.ts) < teamNewsTTL {
-			teamTransactionsCache.RUnlock()
-			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(e.resp); err != nil {
-				fmt.Printf("error encoding cached team transactions response: %v\n", err)
-				http.Error(w, "Encoding error", http.StatusInternalServerError)
-				return
-			}
-			return
-		}
-	}
-	teamTransactionsCache.RUnlock()
+	cacheKey := fmt.Sprintf("team-transactions:%s", teamId)
 
 	// We'll request stories tagged as transactions and paginate until we have enough items.
 	pageSize := 30
@@ -204,25 +155,21 @@ func handleAPITeamTransactions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests {
-			// If upstream rate-limits, return cached if available
+			// If upstream rate-limits, try Redis
 			if cerr := resp.Body.Close(); cerr != nil {
 				fmt.Printf("warning: closing transactions resp body (rate-limited): %v\n", cerr)
 			}
-			teamTransactionsCache.RLock()
-			if e, ok := teamTransactionsCache.m[teamId]; ok {
-				// respect cached TTL
-				if time.Since(e.ts) < 10*teamNewsTTL {
-					teamTransactionsCache.RUnlock()
-					w.Header().Set("Content-Type", "application/json")
-					if err := json.NewEncoder(w).Encode(e.resp); err != nil {
-						fmt.Printf("error encoding cached team transactions response (rate-limited): %v\n", err)
-						http.Error(w, "Encoding error", http.StatusInternalServerError)
-						return
-					}
-					return
+			if cachedData, cacheErr := getCachedRaw(cacheKey); cacheErr == nil {
+				fmt.Printf("Upstream 429 for team transactions %s, using Redis cache\n", teamId)
+				w.Header().Set("Content-Type", "application/json")
+				if _, writeErr := w.Write(cachedData); writeErr != nil {
+					fmt.Printf("error writing cached team transactions response: %v\n", writeErr)
+					http.Error(w, "Encoding error", http.StatusInternalServerError)
 				}
+				return
+			} else {
+				fmt.Printf("No cached team transactions for %s in Redis: %v\n", teamId, cacheErr)
 			}
-			teamTransactionsCache.RUnlock()
 			http.Error(w, "Upstream rate limited", http.StatusBadGateway)
 			return
 		}
@@ -323,10 +270,12 @@ func handleAPITeamTransactions(w http.ResponseWriter, r *http.Request) {
 
 	respObj := TransactionsResponse{Transactions: txs}
 
-	// Cache successful response
-	teamTransactionsCache.Lock()
-	teamTransactionsCache.m[teamId] = cacheEntry{resp: respObj, ts: time.Now()}
-	teamTransactionsCache.Unlock()
+	// Cache successful response in Redis
+	if cacheData, jsonErr := json.Marshal(respObj); jsonErr == nil {
+		if setErr := setCachedRaw(cacheKey, cacheData, time.Hour); setErr != nil {
+			fmt.Printf("Failed to cache team transactions for %s: %v\n", teamId, setErr)
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(respObj); err != nil {

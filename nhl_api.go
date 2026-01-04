@@ -1,15 +1,287 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
+
+var (
+	redisClient *redis.Client
+	redisCtx    = context.Background()
+)
+
+func init() {
+	if redisAddr := os.Getenv("REDIS_ADDR"); redisAddr != "" {
+		redisClient = redis.NewClient(&redis.Options{
+			Addr: redisAddr,
+		})
+		log.Printf("Redis client initialized with address: %s", redisAddr)
+
+		// Start the cache warmer in the background
+		startCacheWarmer()
+	} else {
+		log.Println("REDIS_ADDR not set, Redis caching disabled")
+	}
+}
+
+func getCachedRaw(key string) ([]byte, error) {
+	if redisClient == nil {
+		return nil, fmt.Errorf("redis not available")
+	}
+	val, err := redisClient.Get(redisCtx, key).Result()
+	if err != nil {
+		return nil, err
+	}
+	return []byte(val), nil
+}
+
+func setCachedRaw(key string, data []byte, ttl time.Duration) error {
+	if redisClient == nil {
+		return fmt.Errorf("redis not available")
+	}
+	return redisClient.Set(redisCtx, key, string(data), ttl).Err()
+}
+
+// getCachedPlayer retrieves a cached player from Redis
+func getCachedPlayer(playerID int) (*PlayerInfo, error) {
+	if redisClient == nil {
+		return nil, fmt.Errorf("redis not available")
+	}
+	cacheKey := fmt.Sprintf("player:%d", playerID)
+	data, err := redisClient.Get(redisCtx, cacheKey).Result()
+	if err != nil {
+		return nil, err
+	}
+	var player PlayerInfo
+	if err := json.Unmarshal([]byte(data), &player); err != nil {
+		return nil, err
+	}
+	return &player, nil
+}
+
+// setCachedPlayer caches a player in Redis with TTL
+func setCachedPlayer(playerID int, player *PlayerInfo) error {
+	if redisClient == nil {
+		return fmt.Errorf("redis not available")
+	}
+	cacheKey := fmt.Sprintf("player:%d", playerID)
+	data, err := json.Marshal(player)
+	if err != nil {
+		return err
+	}
+	return redisClient.Set(redisCtx, cacheKey, string(data), time.Hour).Err()
+}
+
+// startCacheWarmer starts a background goroutine that keeps the cache populated
+func startCacheWarmer() {
+	if redisClient == nil {
+		log.Println("Redis not available, skipping cache warmer")
+		return
+	}
+
+	go func() {
+		log.Println("Starting cache warmer")
+		for {
+			warmCache()
+			// Wait 10 minutes before next full cache check
+			time.Sleep(10 * time.Minute)
+		}
+	}()
+}
+
+// warmCache checks and populates missing cache entries
+func warmCache() {
+	// Try to acquire a lock to prevent multiple instances from working simultaneously
+	lockKey := "cache-warmer-lock"
+	lockValue := fmt.Sprintf("%d", time.Now().Unix())
+
+	// Try to set lock with 15 minute expiration (increased from 5 to handle long operations)
+	set, err := redisClient.SetNX(redisCtx, lockKey, lockValue, 15*time.Minute).Result()
+	if err != nil || !set {
+		log.Println("Another instance is already warming cache, skipping")
+		return
+	}
+	defer redisClient.Del(redisCtx, lockKey) // Release lock when done
+
+	log.Println("Cache warmer acquired lock, starting cache population")
+
+	// Start a goroutine to renew the lock every 2 minutes
+	lockRenewalDone := make(chan bool)
+	go func() {
+		ticker := time.NewTicker(2 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				// Renew lock by extending TTL
+				if err := redisClient.Expire(redisCtx, lockKey, 15*time.Minute).Err(); err != nil {
+					log.Printf("Failed to renew cache warmer lock: %v", err)
+					return
+				}
+				log.Println("Cache warmer lock renewed")
+			case <-lockRenewalDone:
+				return
+			}
+		}
+	}()
+	defer close(lockRenewalDone) // Stop the renewal goroutine when done
+
+	// First, ensure standings are cached
+	standingsDate := getStandingsDate()
+	standingsKey := fmt.Sprintf("standings:%s", standingsDate)
+
+	if _, err := getCachedRaw(standingsKey); err != nil {
+		log.Printf("Standings not cached, fetching...")
+		fetchAndCacheWithBackoff(standingsKey, func() ([]byte, error) {
+			teams, err := GetAllTeams()
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(teams)
+		})
+	}
+
+	// Get all teams to know what to cache
+	teams, err := GetAllTeams()
+	if err != nil {
+		log.Printf("Failed to get teams for cache warming: %v", err)
+		return
+	}
+
+	seasonID := currentSeasonID()
+
+	// For each team, check and cache missing data
+	for _, team := range teams.Teams {
+		teamAbbrev := strings.ToUpper(team.Abbrev)
+
+		// Check team details
+		detailsKey := fmt.Sprintf("teamdetails:%s", teamAbbrev)
+		if _, err := getCachedRaw(detailsKey); err != nil {
+			log.Printf("Team details not cached for %s, fetching...", teamAbbrev)
+			fetchAndCacheWithBackoff(detailsKey, func() ([]byte, error) {
+				details, err := GetTeamDetails(teamAbbrev)
+				if err != nil {
+					return nil, err
+				}
+				return json.Marshal(details)
+			})
+		}
+
+		// Check roster
+		rosterKey := fmt.Sprintf("roster:%s-%s", teamAbbrev, seasonID)
+		if _, err := getCachedRaw(rosterKey); err != nil {
+			log.Printf("Roster not cached for %s, fetching...", teamAbbrev)
+			fetchAndCacheWithBackoff(rosterKey, func() ([]byte, error) {
+				roster, err := GetRoster(teamAbbrev)
+				if err != nil {
+					return nil, err
+				}
+				return json.Marshal(roster)
+			})
+		}
+
+		// Check prospects
+		prospectsKey := fmt.Sprintf("prospects:%s", teamAbbrev)
+		if _, err := getCachedRaw(prospectsKey); err != nil {
+			log.Printf("Prospects not cached for %s, fetching...", teamAbbrev)
+			if _, err := GetProspects(teamAbbrev); err != nil {
+				log.Printf("Failed to cache prospects for %s: %v", teamAbbrev, err)
+			}
+		}
+
+		// Check team news
+		newsKey := fmt.Sprintf("team-news:%d", team.ID)
+		if _, err := getCachedRaw(newsKey); err != nil {
+			log.Printf("Team news not cached for %s, fetching...", teamAbbrev)
+			fetchAndCacheWithBackoff(newsKey, func() ([]byte, error) {
+				// Simulate the news fetching logic
+				apiUrl := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-us/stories?tags.slug=teamid-%d&$limit=10", team.ID)
+				resp, err := http.Get(apiUrl)
+				if err != nil {
+					return nil, err
+				}
+				defer resp.Body.Close()
+
+				if resp.StatusCode != http.StatusOK {
+					return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+				}
+
+				return io.ReadAll(resp.Body)
+			})
+		}
+
+		// Check team transactions
+		transactionsKey := fmt.Sprintf("team-transactions:%d", team.ID)
+		if _, err := getCachedRaw(transactionsKey); err != nil {
+			log.Printf("Team transactions not cached for %s, fetching...", teamAbbrev)
+			fetchAndCacheWithBackoff(transactionsKey, func() ([]byte, error) {
+				// Simulate the transactions fetching logic (simplified)
+				apiUrl := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-us/stories?tags.slug=teamid-%d&tags.slug=transactions&$limit=30&$skip=0", team.ID)
+				resp, err := http.Get(apiUrl)
+				if err != nil {
+					return nil, err
+				}
+				defer resp.Body.Close()
+
+				if resp.StatusCode != http.StatusOK {
+					return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+				}
+
+				return io.ReadAll(resp.Body)
+			})
+		}
+
+		// Wait 5 seconds between teams to be respectful to the API
+		time.Sleep(5 * time.Second)
+	}
+
+	log.Println("Cache warming cycle completed")
+}
+
+// fetchAndCacheWithBackoff fetches data with exponential backoff on 429 errors
+func fetchAndCacheWithBackoff(cacheKey string, fetchFunc func() ([]byte, error)) {
+	backoffDelays := []time.Duration{30 * time.Second, 1 * time.Minute, 2 * time.Minute, 5 * time.Minute}
+
+	for attempt, delay := range append([]time.Duration{0}, backoffDelays...) {
+		if delay > 0 {
+			log.Printf("Backing off for %v before retrying %s", delay, cacheKey)
+			time.Sleep(delay)
+		}
+
+		data, err := fetchFunc()
+		if err != nil {
+			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
+				if attempt < len(backoffDelays) {
+					log.Printf("429 error for %s, attempt %d, will retry", cacheKey, attempt+1)
+					continue
+				} else {
+					log.Printf("429 error for %s, max retries exceeded, giving up", cacheKey)
+					return
+				}
+			} else {
+				log.Printf("Non-429 error for %s: %v", cacheKey, err)
+				return
+			}
+		}
+
+		// Success! Cache the data
+		if err := setCachedRaw(cacheKey, data, time.Hour); err != nil {
+			log.Printf("Failed to cache %s: %v", cacheKey, err)
+		} else {
+			log.Printf("Successfully cached %s", cacheKey)
+		}
+		return
+	}
+}
 
 const (
 	BaseURL = "https://api-web.nhle.com/v1"
@@ -171,11 +443,6 @@ var (
 	httpClient = &http.Client{
 		Timeout: 10 * time.Second,
 	}
-	teamCache     map[string]*TeamDetails
-	rosterCache   map[string]*RosterResponse // key format: TEAMABBR-SEASONID
-	cacheMutex    sync.RWMutex
-	cacheTimeout  = 5 * time.Minute
-	lastCacheTime time.Time
 	// Map team IDs to official NHL API 3-letter abbreviations
 	teamIDToAbbr = map[int]string{
 		1: "NJD", 2: "NYI", 3: "NYR", 4: "PHI", 5: "PIT",
@@ -214,8 +481,6 @@ func init() {
 	for id, abbrev := range teamIDToAbbr {
 		abbrevToTeamID[abbrev] = id
 	}
-	teamCache = make(map[string]*TeamDetails)
-	rosterCache = make(map[string]*RosterResponse)
 }
 
 // currentSeasonID returns the active NHL season ID like 20252026.
@@ -241,11 +506,29 @@ func getStandingsDate() string {
 
 // GetAllTeams fetches all NHL teams from standings
 func GetAllTeams() (*TeamsResponse, error) {
+	standingsDate := getStandingsDate()
+	cacheKey := fmt.Sprintf("standings:%s", standingsDate)
+
 	// Use date-based standings endpoint (e.g., /standings/2025-11-23)
-	url := fmt.Sprintf("%s/standings/%s", BaseURL, getStandingsDate())
+	url := fmt.Sprintf("%s/standings/%s", BaseURL, standingsDate)
 
 	body, err := fetchURL(url)
 	if err != nil {
+		// Check if it's a 429, and if so, try Redis
+		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
+			log.Printf("Upstream 429 for standings %s, trying Redis", standingsDate)
+			if cachedData, cacheErr := getCachedRaw(cacheKey); cacheErr == nil {
+				log.Printf("Found cached standings for %s in Redis", standingsDate)
+				var response TeamsResponse
+				var jsonErr error
+				if jsonErr = json.Unmarshal(cachedData, &response); jsonErr == nil {
+					return &response, nil
+				}
+				log.Printf("Failed to unmarshal cached standings: %v", jsonErr)
+			} else {
+				log.Printf("No cached standings for %s in Redis: %v", standingsDate, cacheErr)
+			}
+		}
 		return nil, fmt.Errorf("failed to fetch standings for team lookup: %w", err)
 	}
 	defer func() {
@@ -346,22 +629,22 @@ func GetAllTeams() (*TeamsResponse, error) {
 		})
 	}
 
-	return &TeamsResponse{Teams: teams}, nil
+	response := &TeamsResponse{Teams: teams}
+
+	// Cache the successful response in Redis
+	if cacheData, jsonErr := json.Marshal(response); jsonErr == nil {
+		if setErr := setCachedRaw(cacheKey, cacheData, time.Hour); setErr != nil {
+			log.Printf("Failed to cache standings for %s: %v", standingsDate, setErr)
+		}
+	}
+
+	return response, nil
 }
 
 // GetTeamDetails fetches team details including record and stats
 func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
-	cacheMutex.RLock()
-	if time.Since(lastCacheTime) < cacheTimeout {
-		if cached, ok := teamCache[teamId]; ok {
-			cacheMutex.RUnlock()
-			response := &TeamDetailsResponse{
-				Teams: []TeamDetails{*cached},
-			}
-			return response, nil
-		}
-	}
-	cacheMutex.RUnlock()
+	// Try upstream first
+	cacheKey := fmt.Sprintf("teamdetails:%s", strings.ToUpper(teamId))
 
 	// Convert team ID to abbreviation
 	var teamAbbr string
@@ -393,6 +676,21 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 
 	body, err := fetchURL(url)
 	if err != nil {
+		// Check if it's a 429, and if so, try Redis
+		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
+			log.Printf("Upstream 429 for team details %s, trying Redis", teamId)
+			if cachedData, cacheErr := getCachedRaw(cacheKey); cacheErr == nil {
+				log.Printf("Found cached team details for %s in Redis", teamId)
+				var response TeamDetailsResponse
+				var jsonErr error
+				if jsonErr = json.Unmarshal(cachedData, &response); jsonErr == nil {
+					return &response, nil
+				}
+				log.Printf("Failed to unmarshal cached team details: %v", jsonErr)
+			} else {
+				log.Printf("No cached team details for %s in Redis: %v", teamId, cacheErr)
+			}
+		}
 		return nil, fmt.Errorf("failed to fetch standings: %w", err)
 	}
 	defer func() {
@@ -507,7 +805,6 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 		}
 	}
 
-	// Cache the result
 	// Determine a wordmark URL (prefer overrides for known exceptions)
 	overrides := map[string]string{
 		"WSH": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/capitals/logos/wsh-wordmark-sept25_ee1aiv",
@@ -536,12 +833,155 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 	}
 	team.WordmarkURL = wordmark
 
-	cacheMutex.Lock()
-	teamCache[teamId] = &team
-	lastCacheTime = time.Now()
-	cacheMutex.Unlock()
+	response := &TeamDetailsResponse{Teams: []TeamDetails{team}}
 
-	return &TeamDetailsResponse{Teams: []TeamDetails{team}}, nil
+	// Cache the successful response in Redis
+	if cacheData, jsonErr := json.Marshal(response); jsonErr == nil {
+		if setErr := setCachedRaw(cacheKey, cacheData, time.Hour); setErr != nil {
+			log.Printf("Failed to cache team details for %s: %v", teamId, setErr)
+		}
+	}
+
+	return response, nil
+}
+
+// GetProspects fetches team prospects and caches individual player data
+func GetProspects(teamAbbrev string) ([]byte, error) {
+	cacheKey := fmt.Sprintf("prospects:%s", strings.ToUpper(teamAbbrev))
+
+	// Try to get from cache first
+	if cachedData, err := getCachedRaw(cacheKey); err == nil {
+		log.Printf("Found cached prospects for %s", teamAbbrev)
+		return cachedData, nil
+	}
+
+	// Fetch from API
+	url := fmt.Sprintf("%s/prospects/%s", BaseURL, teamAbbrev)
+	body, err := fetchURL(url)
+	if err != nil {
+		// Check if it's a 429, and if so, try Redis
+		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
+			log.Printf("Upstream 429 for prospects %s, trying Redis", teamAbbrev)
+			if cachedData, cacheErr := getCachedRaw(cacheKey); cacheErr == nil {
+				log.Printf("Found cached prospects for %s in Redis", teamAbbrev)
+				return cachedData, nil
+			}
+		}
+		return nil, fmt.Errorf("failed to fetch prospects: %w", err)
+	}
+	defer func() {
+		if cerr := body.Close(); cerr != nil {
+			log.Printf("Error closing response body: %v", cerr)
+		}
+	}()
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return nil, fmt.Errorf("reading prospects response: %w", err)
+	}
+
+	// Parse prospects response to cache individual players
+	var prospectsResp struct {
+		Forwards []struct {
+			ID int `json:"id"`
+		} `json:"forwards"`
+		Defensemen []struct {
+			ID int `json:"id"`
+		} `json:"defensemen"`
+		Goalies []struct {
+			ID int `json:"id"`
+		} `json:"goalies"`
+	}
+
+	if err := json.Unmarshal(data, &prospectsResp); err == nil {
+		// Cache individual prospect player data
+		allProspectIDs := []int{}
+		for _, p := range prospectsResp.Forwards {
+			if p.ID > 0 {
+				allProspectIDs = append(allProspectIDs, p.ID)
+			}
+		}
+		for _, p := range prospectsResp.Defensemen {
+			if p.ID > 0 {
+				allProspectIDs = append(allProspectIDs, p.ID)
+			}
+		}
+		for _, p := range prospectsResp.Goalies {
+			if p.ID > 0 {
+				allProspectIDs = append(allProspectIDs, p.ID)
+			}
+		}
+
+		// Cache individual players (but don't fail if this errors)
+		for _, playerID := range allProspectIDs {
+			if _, err := getCachedPlayer(playerID); err != nil {
+				// Not cached, try to fetch and cache
+				playerData := PlayerInfo{ID: playerID}
+				if err := fetchPlayerData(playerID, &playerData); err == nil {
+					if cacheErr := setCachedPlayer(playerID, &playerData); cacheErr != nil {
+						log.Printf("Failed to cache prospect player %d: %v", playerID, cacheErr)
+					} else {
+						log.Printf("Cached prospect player %d", playerID)
+					}
+				} else {
+					log.Printf("Failed to fetch prospect player %d: %v", playerID, err)
+				}
+			}
+		}
+	} else {
+		log.Printf("Failed to parse prospects response for caching: %v", err)
+	}
+
+	// Cache the prospects response
+	if setErr := setCachedRaw(cacheKey, data, time.Hour); setErr != nil {
+		log.Printf("Failed to cache prospects for %s: %v", teamAbbrev, setErr)
+	}
+
+	return data, nil
+}
+func getOrFetchPlayer(playerID int, basePlayer PlayerInfo) PlayerInfo {
+	// Try to get from cache first
+	if cachedPlayer, err := getCachedPlayer(playerID); err == nil {
+		log.Printf("Found cached player %d", playerID)
+		return *cachedPlayer
+	}
+
+	// Not in cache, need to fetch
+	playerData := basePlayer
+
+	// Retry with exponential backoff
+	backoffDelays := []time.Duration{0, 30 * time.Second, 1 * time.Minute, 2 * time.Minute}
+	for attempt, delay := range backoffDelays {
+		if delay > 0 {
+			log.Printf("Backing off for %v before retrying player %d", delay, playerID)
+			time.Sleep(delay)
+		}
+
+		if err := fetchPlayerData(playerID, &playerData); err != nil {
+			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
+				if attempt < len(backoffDelays)-1 {
+					log.Printf("429 error for player %d, attempt %d, will retry", playerID, attempt+1)
+					continue
+				} else {
+					log.Printf("429 error for player %d, max retries exceeded, using base data", playerID)
+					break
+				}
+			} else {
+				log.Printf("Non-429 error for player %d: %v, using base data", playerID, err)
+				break
+			}
+		} else {
+			// Success! Cache the player data
+			if cacheErr := setCachedPlayer(playerID, &playerData); cacheErr != nil {
+				log.Printf("Failed to cache player %d: %v", playerID, cacheErr)
+			} else {
+				log.Printf("Successfully cached player %d", playerID)
+			}
+			break
+		}
+	}
+
+	return playerData
 }
 
 // GetRoster fetches team roster with player stats
@@ -563,23 +1003,28 @@ func GetRoster(teamId string) (*RosterResponse, error) {
 	}
 
 	seasonID := currentSeasonID()
-	cacheKey := fmt.Sprintf("%s-%s", teamAbbr, seasonID)
-
-	// Check roster cache (key by teamAbbr)
-	cacheMutex.RLock()
-	if cached, ok := rosterCache[cacheKey]; ok {
-		if time.Since(lastCacheTime) < cacheTimeout {
-			cacheMutex.RUnlock()
-			return cached, nil
-		}
-	}
-	cacheMutex.RUnlock()
+	cacheKey := fmt.Sprintf("roster:%s-%s", teamAbbr, seasonID)
 
 	// Build roster URL using current season and lower-case team abbreviation
 	url := fmt.Sprintf("%s/roster/%s/%s", BaseURL, strings.ToLower(teamAbbr), seasonID)
 
 	body, err := fetchURL(url)
 	if err != nil {
+		// Check if it's a 429, and if so, try Redis
+		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
+			log.Printf("Upstream 429 for roster %s, trying Redis", teamId)
+			if cachedData, cacheErr := getCachedRaw(cacheKey); cacheErr == nil {
+				log.Printf("Found cached roster for %s in Redis", teamId)
+				var response RosterResponse
+				var jsonErr error
+				if jsonErr = json.Unmarshal(cachedData, &response); jsonErr == nil {
+					return &response, nil
+				}
+				log.Printf("Failed to unmarshal cached roster: %v", jsonErr)
+			} else {
+				log.Printf("No cached roster for %s in Redis: %v", teamId, cacheErr)
+			}
+		}
 		return nil, fmt.Errorf("failed to fetch roster: %w", err)
 	}
 	defer func() {
@@ -636,8 +1081,14 @@ func GetRoster(teamId string) (*RosterResponse, error) {
 
 	// Add forwards
 	for _, player := range rosterResp.Forwards {
-		name := player.FirstName.Default + " " + player.LastName.Default
-		playerData := PlayerInfo{
+		// Skip obviously invalid roster entries early (avoid fetching)
+		if player.ID == 0 || strings.TrimSpace(player.FirstName.Default) == "" || strings.TrimSpace(player.LastName.Default) == "" {
+			log.Printf("Skipping invalid roster forward entry: id=%d first='%s' last='%s'", player.ID, player.FirstName.Default, player.LastName.Default)
+			continue
+		}
+
+		name := strings.TrimSpace(player.FirstName.Default + " " + player.LastName.Default)
+		basePlayer := PlayerInfo{
 			ID:           player.ID,
 			Name:         name,
 			Number:       player.SweaterNumber,
@@ -646,9 +1097,15 @@ func GetRoster(teamId string) (*RosterResponse, error) {
 			Stats:        &PlayerStats{},
 		}
 
-		// Fetch player stats from landing endpoint
+		playerData := basePlayer
 		if player.ID > 0 {
-			fetchPlayerData(player.ID, &playerData)
+			playerData = getOrFetchPlayer(player.ID, basePlayer)
+		}
+
+		// Defensive guard: skip any player that still looks invalid after fetch
+		if playerData.ID == 0 || strings.TrimSpace(playerData.Name) == "" {
+			log.Printf("Skipping invalid forward after fetch: id=%d name='%s'", playerData.ID, playerData.Name)
+			continue
 		}
 
 		players = append(players, playerData)
@@ -656,8 +1113,14 @@ func GetRoster(teamId string) (*RosterResponse, error) {
 
 	// Add defensemen
 	for _, player := range rosterResp.Defensemen {
-		name := player.FirstName.Default + " " + player.LastName.Default
-		playerData := PlayerInfo{
+		// Skip obviously invalid roster entries early
+		if player.ID == 0 || strings.TrimSpace(player.FirstName.Default) == "" || strings.TrimSpace(player.LastName.Default) == "" {
+			log.Printf("Skipping invalid roster defenseman entry: id=%d first='%s' last='%s'", player.ID, player.FirstName.Default, player.LastName.Default)
+			continue
+		}
+
+		name := strings.TrimSpace(player.FirstName.Default + " " + player.LastName.Default)
+		basePlayer := PlayerInfo{
 			ID:           player.ID,
 			Name:         name,
 			Number:       player.SweaterNumber,
@@ -666,9 +1129,15 @@ func GetRoster(teamId string) (*RosterResponse, error) {
 			Stats:        &PlayerStats{},
 		}
 
-		// Fetch player stats from landing endpoint
+		playerData := basePlayer
 		if player.ID > 0 {
-			fetchPlayerData(player.ID, &playerData)
+			playerData = getOrFetchPlayer(player.ID, basePlayer)
+		}
+
+		// Defensive guard: skip any player that still looks invalid after fetch
+		if playerData.ID == 0 || strings.TrimSpace(playerData.Name) == "" {
+			log.Printf("Skipping invalid defenseman after fetch: id=%d name='%s'", playerData.ID, playerData.Name)
+			continue
 		}
 
 		players = append(players, playerData)
@@ -676,8 +1145,14 @@ func GetRoster(teamId string) (*RosterResponse, error) {
 
 	// Add goalies
 	for _, player := range rosterResp.Goalies {
-		name := player.FirstName.Default + " " + player.LastName.Default
-		playerData := PlayerInfo{
+		// Skip obviously invalid roster entries early
+		if player.ID == 0 || strings.TrimSpace(player.FirstName.Default) == "" || strings.TrimSpace(player.LastName.Default) == "" {
+			log.Printf("Skipping invalid roster goalie entry: id=%d first='%s' last='%s'", player.ID, player.FirstName.Default, player.LastName.Default)
+			continue
+		}
+
+		name := strings.TrimSpace(player.FirstName.Default + " " + player.LastName.Default)
+		basePlayer := PlayerInfo{
 			ID:           player.ID,
 			Name:         name,
 			Number:       player.SweaterNumber,
@@ -686,29 +1161,63 @@ func GetRoster(teamId string) (*RosterResponse, error) {
 			Stats:        &PlayerStats{},
 		}
 
-		// Fetch player stats from landing endpoint
+		playerData := basePlayer
 		if player.ID > 0 {
-			fetchPlayerData(player.ID, &playerData)
+			playerData = getOrFetchPlayer(player.ID, basePlayer)
+		}
+
+		// Defensive guard: skip any player that still looks invalid after fetch
+		if playerData.ID == 0 || strings.TrimSpace(playerData.Name) == "" {
+			log.Printf("Skipping invalid goalie after fetch: id=%d name='%s'", playerData.ID, playerData.Name)
+			continue
 		}
 
 		players = append(players, playerData)
 	}
 
 	resp := &RosterResponse{Players: players}
-	cacheMutex.Lock()
-	rosterCache[cacheKey] = resp
-	lastCacheTime = time.Now()
-	cacheMutex.Unlock()
+
+	// Validate that all players have minimum required data
+	var missingDataPlayers []string
+	for _, player := range players {
+		if player.Name == "" {
+			missingDataPlayers = append(missingDataPlayers, fmt.Sprintf("player %d missing name", player.ID))
+		}
+		if player.Position == "" {
+			missingDataPlayers = append(missingDataPlayers, fmt.Sprintf("player %d (%s) missing position", player.ID, player.Name))
+		}
+		// Log warnings for missing photos/stats but don't fail
+		if player.Photo == "" {
+			log.Printf("Warning: player %d (%s) missing photo", player.ID, player.Name)
+		}
+		if player.Stats == nil || player.Stats.Games == 0 {
+			log.Printf("Warning: player %d (%s) missing or empty stats", player.ID, player.Name)
+		}
+	}
+
+	if len(missingDataPlayers) > 0 {
+		log.Printf("Warning: roster for %s has players with missing required data: %v", teamId, missingDataPlayers)
+		// Don't cache incomplete roster data
+		return resp, nil
+	}
+
+	// Cache the successful response in Redis
+	if cacheData, jsonErr := json.Marshal(resp); jsonErr == nil {
+		if setErr := setCachedRaw(cacheKey, cacheData, time.Hour); setErr != nil {
+			log.Printf("Failed to cache roster for %s: %v", teamId, setErr)
+		}
+	}
+
 	return resp, nil
 }
 
 // fetchPlayerData fetches player stats and photo from the player landing endpoint
-func fetchPlayerData(playerID int, player *PlayerInfo) {
+func fetchPlayerData(playerID int, player *PlayerInfo) error {
 	url := fmt.Sprintf("%s/player/%d/landing", BaseURL, playerID)
 
 	body, err := fetchURL(url)
 	if err != nil {
-		return
+		return fmt.Errorf("failed to fetch player %d data: %w", playerID, err)
 	}
 	defer func() {
 		if cerr := body.Close(); cerr != nil {
@@ -718,7 +1227,7 @@ func fetchPlayerData(playerID int, player *PlayerInfo) {
 
 	data, err := io.ReadAll(body)
 	if err != nil {
-		return
+		return fmt.Errorf("failed to read player %d response: %w", playerID, err)
 	}
 
 	var playerResp struct {
@@ -752,7 +1261,7 @@ func fetchPlayerData(playerID int, player *PlayerInfo) {
 	}
 
 	if err := json.Unmarshal(data, &playerResp); err != nil {
-		return
+		return fmt.Errorf("failed to parse player %d response: %w", playerID, err)
 	}
 
 	// Set photo
@@ -799,6 +1308,8 @@ func fetchPlayerData(playerID int, player *PlayerInfo) {
 			Shots:     subSeason.Shots,
 		}
 	}
+
+	return nil
 }
 func fetchURL(url string) (io.ReadCloser, error) {
 	resp, err := httpClient.Get(url)

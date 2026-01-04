@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -173,23 +174,15 @@ func handleAPIProspects(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	teamAbbrev := vars["teamAbbrev"]
 
-	// Construct NHL API URL
-	url := fmt.Sprintf("%s/prospects/%s", BaseURL, teamAbbrev)
-
-	body, err := fetchURL(url)
+	data, err := GetProspects(teamAbbrev)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	defer func() {
-		if err := body.Close(); err != nil {
-			log.Printf("Error closing response body: %v", err)
-		}
-	}()
 
 	w.Header().Set("Content-Type", "application/json")
-	if _, err := io.Copy(w, body); err != nil {
-		log.Printf("Error copying prospects response: %v", err)
+	if _, err := w.Write(data); err != nil {
+		log.Printf("Error writing prospects response: %v", err)
 	}
 }
 
@@ -199,9 +192,69 @@ func handleAPIPlayer(w http.ResponseWriter, r *http.Request) {
 
 	// Construct NHL API URL
 	url := fmt.Sprintf("%s/player/%s/landing", BaseURL, playerId)
+	cacheKey := fmt.Sprintf("player:%s", playerId)
 
 	body, err := fetchURL(url)
 	if err != nil {
+		// Check if it's a 429, and if so, try Redis
+		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
+			log.Printf("Upstream 429 for player %s, trying Redis", playerId)
+			if cachedData, cacheErr := getCachedRaw(cacheKey); cacheErr == nil {
+				log.Printf("Found cached player for %s in Redis", playerId)
+				// Parse the JSON to enrich with team abbreviations
+				var playerData map[string]interface{}
+				if err := json.Unmarshal(cachedData, &playerData); err != nil {
+					// If parsing fails, just return raw data
+					w.Header().Set("Content-Type", "application/json")
+					if _, werr := w.Write(cachedData); werr != nil {
+						log.Printf("Error writing cached response: %v", werr)
+					}
+					return
+				}
+
+				// Enrich seasonTotals with team abbreviations
+				if seasonTotals, ok := playerData["seasonTotals"].([]interface{}); ok {
+					for _, seasonEntry := range seasonTotals {
+						if season, ok := seasonEntry.(map[string]interface{}); ok {
+							// Try to get team name and map to abbreviation
+							if teamNameObj, ok := season["teamName"].(map[string]interface{}); ok {
+								if teamName, ok := teamNameObj["default"].(string); ok {
+									if abbrev, exists := teamNameToAbbr[teamName]; exists {
+										season["teamAbbrev"] = abbrev
+									}
+								}
+							}
+							// Fallback: try teamId if available
+							if teamIdFloat, ok := season["teamId"].(float64); ok {
+								teamId := int(teamIdFloat)
+								if abbrev, exists := teamIDToAbbr[teamId]; exists {
+									season["teamAbbrev"] = abbrev
+								}
+							}
+						}
+					}
+				}
+
+				// Return enriched cached data
+				enrichedData, err := json.Marshal(playerData)
+				if err != nil {
+					// If marshaling fails, return original cached data
+					w.Header().Set("Content-Type", "application/json")
+					if _, werr := w.Write(cachedData); werr != nil {
+						log.Printf("Error writing cached response: %v", werr)
+					}
+					return
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				if _, err := w.Write(enrichedData); err != nil {
+					log.Printf("Error writing enriched cached data: %v", err)
+				}
+				return
+			} else {
+				log.Printf("No cached player for %s in Redis: %v", playerId, cacheErr)
+			}
+		}
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -266,6 +319,11 @@ func handleAPIPlayer(w http.ResponseWriter, r *http.Request) {
 	if _, err := w.Write(enrichedData); err != nil {
 		log.Printf("Error writing enriched data: %v", err)
 	}
+
+	// Cache the successful response in Redis (use enriched data)
+	if setErr := setCachedRaw(cacheKey, enrichedData, time.Hour); setErr != nil {
+		log.Printf("Failed to cache player for %s: %v", playerId, setErr)
+	}
 }
 
 func handleAPIPlayerBio(w http.ResponseWriter, r *http.Request) {
@@ -274,9 +332,24 @@ func handleAPIPlayerBio(w http.ResponseWriter, r *http.Request) {
 
 	// Construct biography API URL
 	url := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-us/players?tags.slug=playerid-%s", playerId)
+	cacheKey := fmt.Sprintf("player-bio:%s", playerId)
 
 	body, err := fetchURL(url)
 	if err != nil {
+		// Check if it's a 429, and if so, try Redis
+		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
+			log.Printf("Upstream 429 for player bio %s, trying Redis", playerId)
+			if cachedData, cacheErr := getCachedRaw(cacheKey); cacheErr == nil {
+				log.Printf("Found cached player bio for %s in Redis", playerId)
+				w.Header().Set("Content-Type", "application/json")
+				if _, writeErr := w.Write(cachedData); writeErr != nil {
+					log.Printf("Error writing cached player bio response: %v", writeErr)
+				}
+				return
+			} else {
+				log.Printf("No cached player bio for %s in Redis: %v", playerId, cacheErr)
+			}
+		}
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -295,6 +368,12 @@ func handleAPIPlayerBio(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(data); err != nil {
 		log.Printf("Error writing bio data: %v", err)
+		return
+	}
+
+	// Cache the successful response in Redis
+	if setErr := setCachedRaw(cacheKey, data, time.Hour); setErr != nil {
+		log.Printf("Failed to cache player bio for %s: %v", playerId, setErr)
 	}
 }
 
@@ -304,9 +383,24 @@ func handleAPISchedule(w http.ResponseWriter, r *http.Request) {
 
 	// Construct NHL API URL for schedule
 	url := fmt.Sprintf("%s/schedule/%s", BaseURL, date)
+	cacheKey := fmt.Sprintf("schedule:%s", date)
 
 	body, err := fetchURL(url)
 	if err != nil {
+		// Check if it's a 429, and if so, try Redis
+		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
+			log.Printf("Upstream 429 for schedule %s, trying Redis", date)
+			if cachedData, cacheErr := getCachedRaw(cacheKey); cacheErr == nil {
+				log.Printf("Found cached schedule for %s in Redis", date)
+				w.Header().Set("Content-Type", "application/json")
+				if _, writeErr := w.Write(cachedData); writeErr != nil {
+					log.Printf("Error writing cached schedule response: %v", writeErr)
+				}
+				return
+			} else {
+				log.Printf("No cached schedule for %s in Redis: %v", date, cacheErr)
+			}
+		}
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -325,6 +419,12 @@ func handleAPISchedule(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(data); err != nil {
 		log.Printf("Error writing schedule data: %v", err)
+		return
+	}
+
+	// Cache the successful response in Redis
+	if setErr := setCachedRaw(cacheKey, data, time.Hour); setErr != nil {
+		log.Printf("Failed to cache schedule for %s: %v", date, setErr)
 	}
 }
 
@@ -431,16 +531,33 @@ func handleAPITeamSchedule(w http.ResponseWriter, r *http.Request) {
 	// Get season parameter from query string (optional)
 	season := r.URL.Query().Get("season")
 	var url string
+	var cacheKey string
 	if season != "" {
 		// Fetch specific season (e.g., "20232024")
 		url = fmt.Sprintf("%s/club-schedule-season/%s/%s", BaseURL, teamAbbrev, season)
+		cacheKey = fmt.Sprintf("team-schedule:%s:%s", teamAbbrev, season)
 	} else {
 		// Fetch current season
 		url = fmt.Sprintf("%s/club-schedule-season/%s/now", BaseURL, teamAbbrev)
+		cacheKey = fmt.Sprintf("team-schedule:%s:now", teamAbbrev)
 	}
 
 	body, err := fetchURL(url)
 	if err != nil {
+		// Check if it's a 429, and if so, try Redis
+		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
+			log.Printf("Upstream 429 for team schedule %s, trying Redis", cacheKey)
+			if cachedData, cacheErr := getCachedRaw(cacheKey); cacheErr == nil {
+				log.Printf("Found cached team schedule for %s in Redis", cacheKey)
+				w.Header().Set("Content-Type", "application/json")
+				if _, writeErr := w.Write(cachedData); writeErr != nil {
+					log.Printf("Error writing cached team schedule response: %v", writeErr)
+				}
+				return
+			} else {
+				log.Printf("No cached team schedule for %s in Redis: %v", cacheKey, cacheErr)
+			}
+		}
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -459,6 +576,12 @@ func handleAPITeamSchedule(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(data); err != nil {
 		log.Printf("Error writing team schedule data: %v", err)
+		return
+	}
+
+	// Cache the successful response in Redis
+	if setErr := setCachedRaw(cacheKey, data, time.Hour); setErr != nil {
+		log.Printf("Failed to cache team schedule for %s: %v", cacheKey, setErr)
 	}
 }
 
@@ -473,9 +596,24 @@ func handleAPIVideos(w http.ResponseWriter, r *http.Request) {
 
 	// Build forge-dapi URL (limit 100)
 	url := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-US/videos?$limit=100&tags.slug=gameid-%s", gameId)
+	cacheKey := fmt.Sprintf("videos:%s", gameId)
 
 	body, err := fetchURL(url)
 	if err != nil {
+		// Check if it's a 429, and if so, try Redis
+		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
+			log.Printf("Upstream 429 for videos %s, trying Redis", gameId)
+			if cachedData, cacheErr := getCachedRaw(cacheKey); cacheErr == nil {
+				log.Printf("Found cached videos for %s in Redis", gameId)
+				w.Header().Set("Content-Type", "application/json")
+				if _, writeErr := w.Write(cachedData); writeErr != nil {
+					log.Printf("Error writing cached videos response: %v", writeErr)
+				}
+				return
+			} else {
+				log.Printf("No cached videos for %s in Redis: %v", gameId, cacheErr)
+			}
+		}
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -495,5 +633,11 @@ func handleAPIVideos(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(data); err != nil {
 		log.Printf("Error writing videos response: %v", err)
+		return
+	}
+
+	// Cache the successful response in Redis
+	if setErr := setCachedRaw(cacheKey, data, time.Hour); setErr != nil {
+		log.Printf("Failed to cache videos for %s: %v", gameId, setErr)
 	}
 }
