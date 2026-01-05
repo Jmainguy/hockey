@@ -74,6 +74,35 @@ type PlayerInfo struct {
 	Stats         *PlayerStats `json:"stats"`
 }
 
+// RosterPlayer is the parsed shape we get from the NHL roster/prospects endpoints.
+// Keep it as a single struct so parsing is consistent across callers.
+type RosterPlayer struct {
+	ID            int               `json:"id"`
+	Headshot      string            `json:"headshot"`
+	FirstName     map[string]string `json:"firstName"`
+	LastName      map[string]string `json:"lastName"`
+	SweaterNumber int               `json:"sweaterNumber"`
+	PositionCode  string            `json:"positionCode"`
+	ShootsCatches string            `json:"shootsCatches"`
+}
+
+// pickName returns the best available name from localized name fields.
+// It prefers the "default" key, then returns any other language if default is absent.
+func pickName(nameMap map[string]string) string {
+	if nameMap == nil {
+		return ""
+	}
+	if v, ok := nameMap["default"]; ok && v != "" {
+		return v
+	}
+	for _, v := range nameMap {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // PlayerStats represents player statistics
 type PlayerStats struct {
 	Games          int     `json:"games,omitempty"`
