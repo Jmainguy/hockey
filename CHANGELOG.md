@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/Jmainguy/hockey/compare/v1.9.0...v1.9.1) (2026-01-05)
+
+
+### Bug Fixes
+
+* cache players wrong ([4e40a48](https://github.com/Jmainguy/hockey/commit/4e40a48d6e0fac4e2223ed6da5fb8739dc477ebb))
+
 ## [1.9.0](https://github.com/Jmainguy/hockey/compare/v1.8.0...v1.9.0) (2026-01-04)
 
 
