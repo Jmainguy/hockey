@@ -360,7 +360,7 @@ func seedWarmQueue() error {
 		abbr := strings.ToUpper(t.Abbrev)
 		tdKey := fmt.Sprintf("teamdetails:%s", abbr)
 		rosterKey := fmt.Sprintf("roster:%s-%s", abbr, season)
-		prospectsKey := fmt.Sprintf("prospects:%s", strings.ToLower(abbr))
+		prospectsKey := fmt.Sprintf("prospects:%s", abbr)
 		if err := enqueueWarmKey(tdKey); err != nil {
 			log.Printf("seedWarmQueue: failed enqueue %s: %v", tdKey, err)
 		}
