@@ -149,6 +149,8 @@ func handleAPITeamDetails(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// (debug handler removed)
+
 func handleAPIRoster(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	teamId := vars["teamId"]

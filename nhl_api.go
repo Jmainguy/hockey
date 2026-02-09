@@ -84,23 +84,16 @@ func scheduleWarmRetry(key string, delaySeconds int64) error {
 func fetchBytesForWarmKey(key string) ([]byte, error) {
 	switch {
 	case strings.HasPrefix(key, "standings:"):
-		date := strings.TrimPrefix(key, "standings:")
-		url := fmt.Sprintf("%s/standings/%s", BaseURL, date)
-		body, err := fetchURL(url)
+		// Use GetAllTeams so warmer and UI share the same parsing/caching logic
+		// for standings-derived team lists.
+		teams, err := GetAllTeams()
 		if err != nil {
 			return nil, err
 		}
-		defer body.Close()
-		return io.ReadAll(body)
+		return json.Marshal(teams)
 	case strings.HasPrefix(key, "schedule:"):
 		date := strings.TrimPrefix(key, "schedule:")
-		url := fmt.Sprintf("%s/schedule/%s", BaseURL, date)
-		body, err := fetchURL(url)
-		if err != nil {
-			return nil, err
-		}
-		defer body.Close()
-		return io.ReadAll(body)
+		return GetSchedule(date)
 	case strings.HasPrefix(key, "roster:"):
 		// roster:ABBR-SEASON
 		// Use the same logic as the UI: call GetRoster to produce the canonical
@@ -132,23 +125,21 @@ func fetchBytesForWarmKey(key string) ([]byte, error) {
 		}
 		return json.Marshal(td)
 	case strings.HasPrefix(key, "prospects:"):
+		// Delegate to GetProspects so the warmer and on-demand UI use identical
+		// logic and cache shapes.
 		team := strings.TrimPrefix(key, "prospects:")
-		url := fmt.Sprintf("%s/prospects/%s", BaseURL, team)
-		body, err := fetchURL(url)
+		data, err := GetProspects(team)
 		if err != nil {
 			return nil, err
 		}
-		defer body.Close()
-		return io.ReadAll(body)
+		return data, nil
 	case strings.HasPrefix(key, "player:"):
 		id := strings.TrimPrefix(key, "player:")
-		url := fmt.Sprintf("%s/player/%s/landing", BaseURL, id)
-		body, err := fetchURL(url)
+		data, err := GetPlayer(id)
 		if err != nil {
 			return nil, err
 		}
-		defer body.Close()
-		return io.ReadAll(body)
+		return data, nil
 	case strings.HasPrefix(key, "team-news:"):
 		// team-news:<id>
 		id := strings.TrimPrefix(key, "team-news:")
@@ -1415,6 +1406,19 @@ func GetProspects(teamAbbrev string) ([]byte, error) {
 				}
 			}
 		}
+
+		// Enqueue player warming for these prospect players so the warmer will
+		// populate the `player:<id>` cache using the same GetPlayer logic.
+		if redisClient != nil {
+			for _, playerID := range allProspectIDs {
+				pKey := fmt.Sprintf("player:%d", playerID)
+				if err := enqueueWarmKey(pKey); err != nil {
+					log.Printf("GetProspects: failed to enqueue warm key %s: %v", pKey, err)
+				}
+				// small pause to avoid hammering upstream when many prospects are present
+				time.Sleep(50 * time.Millisecond)
+			}
+		}
 	} else {
 		log.Printf("Failed to parse prospects response for caching: %v", err)
 	}
@@ -1424,6 +1428,57 @@ func GetProspects(teamAbbrev string) ([]byte, error) {
 		log.Printf("Failed to cache prospects for %s: %v", teamAbbrev, setErr)
 	}
 
+	return data, nil
+}
+
+// GetSchedule fetches the schedule for a given date and caches the raw payload.
+func GetSchedule(date string) ([]byte, error) {
+	cacheKey := fmt.Sprintf("schedule:%s", date)
+
+	// Try cache first
+	if cachedData, err := getCachedRaw(cacheKey); err == nil {
+		log.Printf("Cache hit for schedule:%s", date)
+		return cachedData, nil
+	}
+
+	// Fetch from API using the shared fetch/backoff helper so behavior matches the handler
+	data, err := getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
+		url := fmt.Sprintf("%s/schedule/%s", BaseURL, date)
+		body, err := fetchURL(url)
+		if err != nil {
+			return nil, err
+		}
+		defer body.Close()
+		return io.ReadAll(body)
+	}, time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+// GetPlayer fetches the player landing JSON and caches the raw payload.
+func GetPlayer(playerId string) ([]byte, error) {
+	cacheKey := fmt.Sprintf("player:%s", playerId)
+
+	// Try cache first
+	if cachedData, err := getCachedRaw(cacheKey); err == nil {
+		log.Printf("Cache hit for player:%s", playerId)
+		return cachedData, nil
+	}
+
+	data, err := getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
+		url := fmt.Sprintf("%s/player/%s/landing", BaseURL, playerId)
+		body, err := fetchURL(url)
+		if err != nil {
+			return nil, err
+		}
+		defer body.Close()
+		return io.ReadAll(body)
+	}, time.Hour)
+	if err != nil {
+		return nil, err
+	}
 	return data, nil
 }
 
