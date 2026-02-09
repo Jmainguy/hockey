@@ -43,7 +43,7 @@ func handleAPITeamNews(w http.ResponseWriter, r *http.Request) {
 
 	// Build the Forge DAPI URL for team news
 	apiUrl := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-us/stories?tags.slug=teamid-%s&$limit=10", teamId)
-	resp, err := http.Get(apiUrl)
+	resp, err := rateLimitedGet(apiUrl)
 	if err != nil {
 		http.Error(w, "Failed to fetch team news", http.StatusBadGateway)
 		return
@@ -148,7 +148,7 @@ func handleAPITeamTransactions(w http.ResponseWriter, r *http.Request) {
 	for page := 0; page < maxPages; page++ {
 		// Do not restrict by season tag; fetch transactions broadly and paginate until we have enough
 		apiUrl := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-us/stories?tags.slug=teamid-%s&tags.slug=transactions&$limit=%d&$skip=%d", teamId, pageSize, skip)
-		resp, err := http.Get(apiUrl)
+		resp, err := rateLimitedGet(apiUrl)
 		if err != nil {
 			http.Error(w, "Failed to fetch transactions", http.StatusBadGateway)
 			return

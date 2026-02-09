@@ -5,6 +5,7 @@ go 1.25
 require (
 	github.com/gorilla/mux v1.8.1
 	github.com/redis/go-redis/v9 v9.17.2
+	golang.org/x/time v0.14.0
 )
 
 require (
