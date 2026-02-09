@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1](https://github.com/Jmainguy/hockey/compare/v1.10.0...v1.10.1) (2026-02-09)
+
+
+### Bug Fixes
+
+* update schedule / home pages ([533384e](https://github.com/Jmainguy/hockey/commit/533384e24b67f8b4a2682b8b3e538edb05bbce78))
+
 ## [1.10.0](https://github.com/Jmainguy/hockey/compare/v1.9.1...v1.10.0) (2026-02-09)
 
 
