@@ -783,6 +783,76 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 		}
 	}
 
+	// For international teams not in standings, set basic info
+	if team.Name == "" {
+		// Check if it's an international team
+		if _, ok := abbrevToTeamID[teamAbbr]; !ok {
+			// International team
+			switch strings.ToUpper(teamAbbr) {
+			case "USA":
+				team.Name = "United States"
+				team.TeamName = "United States"
+				team.LocationName = "United States"
+			case "CAN":
+				team.Name = "Canada"
+				team.TeamName = "Canada"
+				team.LocationName = "Canada"
+			case "FIN":
+				team.Name = "Finland"
+				team.TeamName = "Finland"
+				team.LocationName = "Finland"
+			case "SWE":
+				team.Name = "Sweden"
+				team.TeamName = "Sweden"
+				team.LocationName = "Sweden"
+			case "CZE":
+				team.Name = "Czechia"
+				team.TeamName = "Czechia"
+				team.LocationName = "Czechia"
+			case "GER":
+				team.Name = "Germany"
+				team.TeamName = "Germany"
+				team.LocationName = "Germany"
+			case "SVK":
+				team.Name = "Slovakia"
+				team.TeamName = "Slovakia"
+				team.LocationName = "Slovakia"
+			case "SUI":
+				team.Name = "Switzerland"
+				team.TeamName = "Switzerland"
+				team.LocationName = "Switzerland"
+			case "FRA":
+				team.Name = "France"
+				team.TeamName = "France"
+				team.LocationName = "France"
+			case "ITA":
+				team.Name = "Italy"
+				team.TeamName = "Italy"
+				team.LocationName = "Italy"
+			case "LAT":
+				team.Name = "Latvia"
+				team.TeamName = "Latvia"
+				team.LocationName = "Latvia"
+			case "DEN":
+				team.Name = "Denmark"
+				team.TeamName = "Denmark"
+				team.LocationName = "Denmark"
+			default:
+				team.Name = teamAbbr
+				team.TeamName = teamAbbr
+				team.LocationName = teamAbbr
+			}
+		}
+	}
+
+	// Set logos: prefer ntl for international teams
+	prefix := "nhl"
+	if team.ID > 1000 || (team.Name != "" && team.ID == -1) {
+		prefix = "ntl"
+	}
+	team.Logo = fmt.Sprintf("https://assets.nhle.com/logos/%s/svg/%s_light.svg", prefix, team.Abbreviation)
+	team.DarkLogo = fmt.Sprintf("https://assets.nhle.com/logos/%s/svg/%s_dark.svg", prefix, team.Abbreviation)
+
 	// Determine a wordmark URL (prefer overrides for known exceptions)
 	overrides := map[string]string{
 		"WSH": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/capitals/logos/wsh-wordmark-sept25_ee1aiv",

@@ -592,6 +592,90 @@ func handleAPITeamSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Try to unmarshal and enrich the team schedule payload so the frontend always
+	// has `logo`/`darkLogo` present for each team. If enrichment fails, fall
+	// back to returning the raw upstream data.
+	var payload map[string]interface{}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write(data); err != nil {
+			log.Printf("Error writing team schedule data: %v", err)
+			return
+		}
+	} else {
+		// Iterate games and enrich homeTeam/awayTeam
+		if gamesRaw, ok := payload["games"].([]interface{}); ok {
+			for _, g := range gamesRaw {
+				gameMap, ok := g.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				for _, side := range []string{"homeTeam", "awayTeam"} {
+					if tRaw, present := gameMap[side]; present {
+						if tMap, ok := tRaw.(map[string]interface{}); ok {
+							// Extract abbrev (may be string or object)
+							abbr := "TBD"
+							if a, ok := tMap["abbrev"].(string); ok && a != "" {
+								abbr = a
+							} else if aObj, ok := tMap["abbrev"].(map[string]interface{}); ok {
+								if d, ok := aObj["default"].(string); ok && d != "" {
+									abbr = d
+								}
+							}
+
+							// Extract numeric id when possible
+							var idNum float64
+							if idf, ok := tMap["id"].(float64); ok {
+								idNum = idf
+							} else if ids, ok := tMap["id"].(string); ok {
+								if v, err := strconv.ParseFloat(ids, 64); err == nil {
+									idNum = v
+								}
+							}
+
+							// Determine prefix: use 'ntl' for non-NHL/high ids
+							prefix := "nhl"
+							if idNum > 1000 {
+								prefix = "ntl"
+							}
+
+							// Only set logo fields if missing
+							if _, ok := tMap["logo"]; !ok || tMap["logo"] == nil || tMap["logo"] == "" {
+								tMap["logo"] = fmt.Sprintf("https://assets.nhle.com/logos/%s/svg/%s_light.svg", prefix, abbr)
+							}
+							if _, ok := tMap["darkLogo"]; !ok || tMap["darkLogo"] == nil || tMap["darkLogo"] == "" {
+								tMap["darkLogo"] = fmt.Sprintf("https://assets.nhle.com/logos/%s/svg/%s_dark.svg", prefix, abbr)
+							}
+							// write back just in case
+							gameMap[side] = tMap
+						}
+					}
+				}
+			}
+		}
+
+		enriched, err := json.Marshal(payload)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := w.Write(data); err != nil {
+				log.Printf("Error writing team schedule data: %v", err)
+				return
+			}
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := w.Write(enriched); err != nil {
+				log.Printf("Error writing enriched team schedule data: %v", err)
+				return
+			}
+
+			// Cache the enriched payload
+			if setErr := setCachedRaw(cacheKey, enriched, time.Hour); setErr != nil {
+				log.Printf("Failed to cache team schedule for %s: %v", cacheKey, setErr)
+			}
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(data); err != nil {
 		log.Printf("Error writing team schedule data: %v", err)

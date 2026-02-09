@@ -36,6 +36,8 @@ type TeamDetails struct {
 	LocationName string `json:"locationName"`
 	Abbreviation string `json:"abbreviation"`
 	WordmarkURL  string `json:"wordmarkUrl,omitempty"`
+	Logo         string `json:"logo,omitempty"`
+	DarkLogo     string `json:"darkLogo,omitempty"`
 	Conference   struct {
 		ID   int    `json:"id"`
 		Name string `json:"name"`

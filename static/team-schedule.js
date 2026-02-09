@@ -279,21 +279,23 @@ function createDayCell(day) {
             const gameStatus = getGameStatus(game);
             
             // Build logo display
+            const homeLogoSrc = game.homeTeam.logo || game.homeTeam.darkLogo || `https://assets.nhle.com/logos/nhl/svg/${homeAbbrev}_light.svg`;
+            const awayLogoSrc = game.awayTeam.logo || game.awayTeam.darkLogo || `https://assets.nhle.com/logos/nhl/svg/${awayAbbrev}_light.svg`;
             const logoHtml = `
                 <div class="game-logos">
                     <div class="team-logo-container">
-                        <img src="https://assets.nhle.com/logos/nhl/svg/${homeAbbrev}_light.svg" 
+                        <img src="${homeLogoSrc}" 
                              alt="${homeAbbrev}" 
                              class="team-logo-calendar"
-                             onerror="this.src=this.src.replace('_light', '_dark')">
+                             onerror="this.src='data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='">
                         <div class="team-abbrev">${homeAbbrev}</div>
                     </div>
                     <span class="vs-text">vs</span>
                     <div class="team-logo-container">
-                        <img src="https://assets.nhle.com/logos/nhl/svg/${awayAbbrev}_light.svg" 
+                        <img src="${awayLogoSrc}" 
                              alt="${awayAbbrev}" 
                              class="team-logo-calendar"
-                             onerror="this.src=this.src.replace('_light', '_dark')">
+                             onerror="this.src='data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='">
                         <div class="team-abbrev">${awayAbbrev}</div>
                     </div>
                 </div>
