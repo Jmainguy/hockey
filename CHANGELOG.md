@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/Jmainguy/hockey/compare/v1.10.1...v1.11.0) (2026-02-09)
+
+
+### Features
+
+* rethink caching strategy ([7c5435c](https://github.com/Jmainguy/hockey/commit/7c5435cec26ce774184dad2c552f831910a8f896))
+
 ## [1.10.1](https://github.com/Jmainguy/hockey/compare/v1.10.0...v1.10.1) (2026-02-09)
 
 
