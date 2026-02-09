@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/Jmainguy/hockey/compare/v1.9.1...v1.10.0) (2026-02-09)
+
+
+### Features
+
+* support olympic teams ([af9d978](https://github.com/Jmainguy/hockey/commit/af9d97837edd2fa8ba9aa0c9d5e42604bf87d230))
+
 ## [1.9.1](https://github.com/Jmainguy/hockey/compare/v1.9.0...v1.9.1) (2026-01-05)
 
 
