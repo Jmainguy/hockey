@@ -172,8 +172,12 @@ function createGameCard(game) {
         window.location.href = url.toString();
     });
     
-    const awayTeam = game.awayTeam;
-    const homeTeam = game.homeTeam;
+    const awayTeam = game.awayTeam || {};
+    const homeTeam = game.homeTeam || {};
+    const homeLogoSrc = homeTeam.logo || homeTeam.darkLogo || `https://assets.nhle.com/logos/nhl/svg/${(homeTeam.abbrev||'TBD')}_light.svg`;
+    const awayLogoSrc = awayTeam.logo || awayTeam.darkLogo || `https://assets.nhle.com/logos/nhl/svg/${(awayTeam.abbrev||'TBD')}_light.svg`;
+    const homeDisplayName = homeTeam.placeName?.default || homeTeam.commonName?.default || homeTeam.abbrev || '';
+    const awayDisplayName = awayTeam.placeName?.default || awayTeam.commonName?.default || awayTeam.abbrev || '';
     const gameState = game.gameState;
     const gameScheduleState = game.gameScheduleState;
     
@@ -295,10 +299,10 @@ function createGameCard(game) {
         <div class="grid grid-cols-3 gap-4 items-center mb-4">
             <!-- Home Team -->
             <div class="text-center">
-                <img src="https://assets.nhle.com/logos/nhl/svg/${homeTeam.abbrev}_light.svg" 
-                     alt="${homeTeam.abbrev}" 
+                <img src="${homeLogoSrc}" 
+                     alt="${homeTeam.abbrev || ''}" 
                      class="w-20 h-20 mx-auto mb-2 drop-shadow-md">
-                <div class="font-bold text-gray-800">${homeTeam.placeName?.default || homeTeam.abbrev}</div>
+                <div class="font-bold text-gray-800">${homeDisplayName}</div>
                 <div class="text-sm text-gray-600">${homeTeam.commonName?.default || ''}</div>
                 <div class="text-xs text-gray-500 mt-1">${homeTeam.record || ''}</div>
             </div>
@@ -310,10 +314,10 @@ function createGameCard(game) {
             
             <!-- Away Team -->
             <div class="text-center">
-                <img src="https://assets.nhle.com/logos/nhl/svg/${awayTeam.abbrev}_light.svg" 
-                     alt="${awayTeam.abbrev}" 
+                <img src="${awayLogoSrc}" 
+                     alt="${awayTeam.abbrev || ''}" 
                      class="w-20 h-20 mx-auto mb-2 drop-shadow-md">
-                <div class="font-bold text-gray-800">${awayTeam.placeName?.default || awayTeam.abbrev}</div>
+                <div class="font-bold text-gray-800">${awayDisplayName}</div>
                 <div class="text-sm text-gray-600">${awayTeam.commonName?.default || ''}</div>
                 <div class="text-xs text-gray-500 mt-1">${awayTeam.record || ''}</div>
             </div>

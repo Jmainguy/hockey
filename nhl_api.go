@@ -1051,20 +1051,30 @@ func getOrFetchPlayer(playerID int, basePlayer PlayerInfo) PlayerInfo {
 
 // GetRoster fetches team roster with player stats
 func GetRoster(teamId string) (*RosterResponse, error) {
-	// Convert team ID to abbreviation
+	// Convert team ID or abbreviation into the canonical abbreviation we use
 	var teamAbbr string
-	teamIDInt := 1
-	if _, err := fmt.Sscanf(teamId, "%d", &teamIDInt); err != nil {
-		// If not an int, treat as abbreviation
-		teamAbbr = strings.ToUpper(teamId)
-		if id, ok := abbrevToTeamID[teamAbbr]; ok {
-			teamIDInt = id
+	teamIDInt := -1
+	// If numeric ID provided, resolve to canonical abbreviation
+	if _, err := fmt.Sscanf(teamId, "%d", &teamIDInt); err == nil {
+		if abbr, ok := teamIDToAbbr[teamIDInt]; ok {
+			teamAbbr = abbr
+		} else {
+			// Unknown numeric ID (likely an international/Olympic team). Fall back to
+			// treating the provided identifier as an abbreviation so the non-NHL
+			// fallback below can return an empty roster instead of an error.
+			log.Printf("Unknown numeric team id %s — falling back to treat as abbrev", teamId)
+			teamAbbr = strings.ToUpper(teamId)
 		}
-	}
-	if abbr, ok := teamIDToAbbr[teamIDInt]; ok {
-		teamAbbr = abbr
 	} else {
-		return nil, fmt.Errorf("unknown team id: %s", teamId)
+		// Not numeric: treat input as abbreviation (e.g., "wpg") and normalize
+		teamAbbr = strings.ToUpper(teamId)
+	}
+
+	// If the abbreviation is not a known NHL team, assume it's an international/Olympic team
+	// and return an empty roster (upstream won't have NHL roster data for these teams).
+	if _, ok := abbrevToTeamID[teamAbbr]; !ok {
+		log.Printf("Detected non‑NHL team abbreviation '%s' — returning empty roster", teamAbbr)
+		return &RosterResponse{Players: []PlayerInfo{}}, nil
 	}
 
 	seasonID := currentSeasonID()

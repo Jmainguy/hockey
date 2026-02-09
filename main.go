@@ -436,28 +436,11 @@ func handleAPIGameLanding(w http.ResponseWriter, r *http.Request) {
 	// Use typed fetcher so we can enrich the payload reliably
 	landing, err := GetGameLanding(gameId)
 	if err != nil {
-		// Fallback to proxying raw data if typed fetch fails
-		url := fmt.Sprintf("%s/gamecenter/%s/landing", BaseURL, gameId)
-		body, berr := fetchURL(url)
-		if berr != nil {
-			http.Error(w, berr.Error(), http.StatusBadGateway)
-			return
-		}
-		defer func() {
-			if err := body.Close(); err != nil {
-				log.Printf("Error closing response body: %v", err)
-			}
-		}()
-		data, rerr := io.ReadAll(body)
-		if rerr != nil {
-			http.Error(w, rerr.Error(), http.StatusBadGateway)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if _, werr := w.Write(data); werr != nil {
-			log.Printf("Error writing landing data: %v", werr)
-		}
-		return
+		// Typed fetch failed (likely due to non-standard payload for international games).
+		// Continue and fetch the raw payload below so we can still enrich it for the
+		// frontend (attach team branding, empty discreteClips/clockText when unavailable).
+		log.Printf("Typed GetGameLanding failed for %s: %v — will enrich raw payload instead", gameId, err)
+		landing = nil
 	}
 
 	// Read raw landing again to preserve original payload structure while enriching
@@ -487,6 +470,42 @@ func handleAPIGameLanding(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Error writing landing data: %v", werr)
 		}
 		return
+	}
+
+	// If the teams in this landing are non‑NHL (Olympic/international), attach
+	// the available team info (name, logo, place, id, abbrev) so the frontend
+	// can render branding even when we don't have an NHL roster for them.
+	for _, side := range []string{"homeTeam", "awayTeam"} {
+		if tRaw, ok := payload[side]; ok {
+			if tMap, ok := tRaw.(map[string]interface{}); ok {
+				abbrev := ""
+				if a, ok := tMap["abbrev"].(string); ok {
+					abbrev = a
+				}
+				if _, known := abbrevToTeamID[abbrev]; !known {
+					info := make(map[string]interface{})
+					// Copy common fields if present
+					fields := []string{"id", "abbrev", "logo", "darkLogo", "placeName", "placeNameWithPreposition", "awaySplitSquad", "homeSplitSquad"}
+					for _, f := range fields {
+						if v, ok := tMap[f]; ok {
+							info[f] = v
+						}
+					}
+					// Extract a human-friendly name from commonName.default when available
+					if cn, ok := tMap["commonName"].(map[string]interface{}); ok {
+						if d, ok := cn["default"].(string); ok {
+							info["name"] = d
+						}
+						info["commonName"] = cn
+					} else if s, ok := tMap["commonName"].(string); ok {
+						info["name"] = s
+					}
+					info["international"] = true
+					// Attach as sideInfo (e.g., homeTeamInfo) for the frontend to consume
+					payload[side+"Info"] = info
+				}
+			}
+		}
 	}
 
 	// Attach discreteClips and clockText

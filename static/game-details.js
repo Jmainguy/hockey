@@ -107,10 +107,15 @@ function wireRadioToggle(game) {
 }
 
 function displayGameDetailsHTML(data) {
-    const awayTeam = data.awayTeam;
-    const homeTeam = data.homeTeam;
-    const teamName = (team) =>
-    `${team.placeName?.default ?? ''} ${team.commonName?.default ?? ''}`.trim() || team.abbrev;
+    const awayTeam = data.awayTeam || {};
+    const homeTeam = data.homeTeam || {};
+    const homeTeamInfo = data.homeTeamInfo || null;
+    const awayTeamInfo = data.awayTeamInfo || null;
+    const teamName = (team, info) => {
+    if (info && info.name) return info.name;
+    return `${team.placeName?.default ?? ''} ${team.commonName?.default ?? ''}`.trim() || team.abbrev || (info && info.abbrev) || '';
+    };
+    const teamLogoSrc = (team, info) => (info && info.logo) ? info.logo : `https://assets.nhle.com/logos/nhl/svg/${(team.abbrev||'TBD')}_light.svg`;
     const fullName = (player) =>
     `${player.firstName?.default ?? ''} ${player.lastName?.default ?? ''}`.trim() || player.name?.default || '';
 
@@ -195,9 +200,9 @@ let detailsHTML = `
     <div class="flex items-center justify-between">
         <!-- Home -->
         <div class="flex flex-col items-center">
-            <a href="/team/${homeTeam.abbrev}">
-                <img src="https://assets.nhle.com/logos/nhl/svg/${homeTeam.abbrev}_light.svg"
-                     alt="${homeTeam.abbrev}"
+            <a href="/team/${homeTeam.abbrev || (homeTeamInfo && homeTeamInfo.abbrev) || ''}">
+                <img src="${teamLogoSrc(homeTeam, homeTeamInfo)}"
+                     alt="${homeTeam.abbrev || (homeTeamInfo && homeTeamInfo.abbrev) || ''}"
                      class="w-14 h-14 mb-1">
             </a>
             ${ homeTeam.radioLink ? `<div class="mt-1"><button id="radioHome" class="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-sm font-semibold">▶ Listen</button></div>` : '' }
@@ -230,9 +235,9 @@ let detailsHTML = `
 
         <!-- Away -->
         <div class="flex flex-col items-center">
-            <a href="/team/${awayTeam.abbrev}">
-                <img src="https://assets.nhle.com/logos/nhl/svg/${awayTeam.abbrev}_light.svg"
-                     alt="${awayTeam.abbrev}"
+            <a href="/team/${awayTeam.abbrev || (awayTeamInfo && awayTeamInfo.abbrev) || ''}">
+                <img src="${teamLogoSrc(awayTeam, awayTeamInfo)}"
+                     alt="${awayTeam.abbrev || (awayTeamInfo && awayTeamInfo.abbrev) || ''}"
                      class="w-14 h-14 mb-1">
             </a>
             ${ awayTeam.radioLink ? `<div class="mt-1"><button id="radioAway" class="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-sm font-semibold">▶ Listen</button></div>` : '' }
@@ -330,10 +335,10 @@ let detailsHTML = `
                     <div class="space-y-4">
             `;
             
-            data.matchup.skaterComparison.leaders.forEach(categoryLeader => {
+                data.matchup.skaterComparison.leaders.forEach(categoryLeader => {
                 const category = categoryLeader.category || '';
-                const homeLeader = categoryLeader.homeLeader;
-                const awayLeader = categoryLeader.awayLeader;
+                const homeLeader = categoryLeader.homeLeader || null;
+                const awayLeader = categoryLeader.awayLeader || null;
                 
                 detailsHTML += `
                     <div class="bg-gray-50 rounded-lg p-4">
@@ -341,30 +346,28 @@ let detailsHTML = `
                         <div class="grid grid-cols-1 gap-4">
                             <!-- Home Leader -->
                             <div class="flex items-center gap-3">
-                                <img src="https://assets.nhle.com/logos/nhl/svg/${homeTeam.abbrev}_light.svg" 
-                                     alt="${homeTeam.abbrev}" 
+                                <img src="${teamLogoSrc(homeTeam, homeTeamInfo)}" 
+                                     alt="${homeTeam.abbrev || (homeTeamInfo && homeTeamInfo.abbrev) || ''}" 
                                      class="w-5 h-5 flex-shrink-0">
-                                  <a href="/player/${homeLeader.playerId}" class="inline-block"><img src="${homeLeader.headshot}" alt="${fullName(homeLeader)}" 
-                                      class="w-10 h-10 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"></a>
+                                ${ homeLeader ? (`<a href="/player/${homeLeader.playerId || homeLeader.id || ''}" class="inline-block"><img src="${homeLeader.headshot || ''}" alt="${fullName(homeLeader)}" class="w-10 h-10 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"></a>
                                 <div class="flex-1 min-w-0">
-                                    <div class="font-bold text-sm"><a href="/player/${homeLeader.playerId}">${fullName(homeLeader)}</a></div>
-                                    <div class="text-xs text-gray-600">#${homeLeader.sweaterNumber} ${homeLeader.positionCode || ''}</div>
+                                    <div class="font-bold text-sm"><a href="/player/${homeLeader.playerId || homeLeader.id || ''}">${fullName(homeLeader)}</a></div>
+                                    <div class="text-xs text-gray-600">#${homeLeader.sweaterNumber || ''} ${homeLeader.positionCode || ''}</div>
                                     <div class="text-lg font-bold text-primary">${homeLeader.value || 0}</div>
-                                </div>
+                                </div>`) : (`<div class="flex-1 min-w-0 text-xs text-gray-500">No leader data</div>`) }
                             </div>
                             
                             <!-- Away Leader -->
                             <div class="flex items-center gap-3">
-                                <img src="https://assets.nhle.com/logos/nhl/svg/${awayTeam.abbrev}_light.svg" 
-                                     alt="${awayTeam.abbrev}" 
+                                <img src="${teamLogoSrc(awayTeam, awayTeamInfo)}" 
+                                     alt="${awayTeam.abbrev || (awayTeamInfo && awayTeamInfo.abbrev) || ''}" 
                                      class="w-5 h-5 flex-shrink-0">
-                                  <a href="/player/${awayLeader.playerId}" class="inline-block"><img src="${awayLeader.headshot}" alt="${fullName(awayLeader)}" 
-                                      class="w-10 h-10 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"></a>
+                                ${ awayLeader ? (`<a href="/player/${awayLeader.playerId || awayLeader.id || ''}" class="inline-block"><img src="${awayLeader.headshot || ''}" alt="${fullName(awayLeader)}" class="w-10 h-10 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"></a>
                                 <div class="flex-1 min-w-0">
-                                    <div class="font-bold text-sm"><a href="/player/${awayLeader.playerId}">${fullName(awayLeader)}</a></div>
-                                    <div class="text-xs text-gray-600">#${awayLeader.sweaterNumber} ${awayLeader.positionCode || ''}</div>
+                                    <div class="font-bold text-sm"><a href="/player/${awayLeader.playerId || awayLeader.id || ''}">${fullName(awayLeader)}</a></div>
+                                    <div class="text-xs text-gray-600">#${awayLeader.sweaterNumber || ''} ${awayLeader.positionCode || ''}</div>
                                     <div class="text-lg font-bold text-primary">${awayLeader.value || 0}</div>
-                                </div>
+                                </div>`) : (`<div class="flex-1 min-w-0 text-xs text-gray-500">No leader data</div>`) }
                             </div>
                         </div>
                     </div>
@@ -410,13 +413,12 @@ let detailsHTML = `
                     homeGoalies.forEach(goalie => {
                         const savePct = goalie.savePctg ? (goalie.savePctg * 100).toFixed(1) : '0.0';
                         const gaa = goalie.gaa ? goalie.gaa.toFixed(2) : '0.00';
-                        
                         detailsHTML += `
                             <div class="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
-                                <a href="/player/${goalie.playerId}" class="inline-block"><img src="${goalie.headshot}" alt="${fullName(goalie)}" class="w-12 h-12 rounded-full object-cover border-2 border-gray-200"></a>
+                                <a href="/player/${goalie.playerId || goalie.id || ''}" class="inline-block"><img src="${goalie.headshot || ''}" alt="${fullName(goalie)}" class="w-12 h-12 rounded-full object-cover border-2 border-gray-200"></a>
                                 <div class="flex-1 min-w-0">
-                                    <div class="font-bold text-sm"><a href="/player/${goalie.playerId}">${fullName(goalie)}</a></div>
-                                    <div class="text-xs text-gray-600">#${goalie.sweaterNumber}: ${goalie.record || '0-0-0'}</div>
+                                    <div class="font-bold text-sm"><a href="/player/${goalie.playerId || goalie.id || ''}">${fullName(goalie)}</a></div>
+                                    <div class="text-xs text-gray-600">#${goalie.sweaterNumber || ''}: ${goalie.record || '0-0-0'}</div>
                                     <div class="flex gap-3 mt-1 text-xs text-gray-700">
                                         <span><strong>${savePct}%</strong> SV%</span>
                                         <span><strong>${gaa}</strong> GAA</span>
@@ -449,14 +451,13 @@ let detailsHTML = `
                     awayGoalies.forEach(goalie => {
                         const savePct = goalie.savePctg ? (goalie.savePctg * 100).toFixed(1) : '0.0';
                         const gaa = goalie.gaa ? goalie.gaa.toFixed(2) : '0.00';
-                        
                         detailsHTML += `
                             <div class="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
-                                  <a href="/player/${goalie.playerId}" class="inline-block"><img src="${goalie.headshot}" alt="${fullName(goalie)}" 
-                                     class="w-12 h-12 rounded-full object-cover border-2 border-gray-200">
+                                  <a href="/player/${goalie.playerId || goalie.id || ''}" class="inline-block"><img src="${goalie.headshot || ''}" alt="${fullName(goalie)}" 
+                                     class="w-12 h-12 rounded-full object-cover border-2 border-gray-200"></a>
                                 <div class="flex-1 min-w-0">
-                                    <div class="font-bold text-sm"><a href="/player/${goalie.playerId}">${fullName(goalie)}</a></div>
-                                    <div class="text-xs text-gray-600">#${goalie.sweaterNumber}: ${goalie.record || '0-0-0'}</div>
+                                    <div class="font-bold text-sm"><a href="/player/${goalie.playerId || goalie.id || ''}">${fullName(goalie)}</a></div>
+                                    <div class="text-xs text-gray-600">#${goalie.sweaterNumber || ''}: ${goalie.record || '0-0-0'}</div>
                                     <div class="flex gap-3 mt-1 text-xs text-gray-700">
                                         <span><strong>${savePct}%</strong> SV%</span>
                                         <span><strong>${gaa}</strong> GAA</span>
