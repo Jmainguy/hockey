@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.11.1](https://github.com/Jmainguy/hockey/compare/v1.11.0...v1.11.1) (2026-02-10)
+
+
+### Bug Fixes
+
+* fixed linting errors ([4af8cd6](https://github.com/Jmainguy/hockey/commit/4af8cd6cfde25417a76d42286a4c754034a440a8))
+* prospects ([e0859f4](https://github.com/Jmainguy/hockey/commit/e0859f4a3bf89c1b9d7f6164d6750ba8d9e598ea))
+* use prospects correct key ([1ee922e](https://github.com/Jmainguy/hockey/commit/1ee922e6afe2e3c8017d024d8d09e9387488279a))
+
 ## [1.11.0](https://github.com/Jmainguy/hockey/compare/v1.10.1...v1.11.0) (2026-02-09)
 
 
