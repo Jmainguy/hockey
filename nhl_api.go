@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,12 @@ var (
 	redisClient *redis.Client
 	redisCtx    = context.Background()
 )
+
+// MaxInlinePlayerFetches bounds how many player landing fetches
+// we will perform synchronously while building the prospects `players`
+// array. This prevents a single on-demand prospects request from
+// triggering many upstream calls (which previously caused 429s).
+const MaxInlinePlayerFetches = 5
 
 func init() {
 	if redisAddr := os.Getenv("REDIS_ADDR"); redisAddr != "" {
@@ -1393,43 +1400,167 @@ func GetProspects(teamAbbrev string) ([]byte, error) {
 			}
 		}
 
-		// Cache individual players (but don't fail if this errors)
-		for _, playerID := range allProspectIDs {
-			// Check if already cached
-			cacheKey := fmt.Sprintf("player:%d", playerID)
-			if _, err := getCachedRaw(cacheKey); err != nil {
-				// Not cached, try to fetch
-				playerData := PlayerInfo{ID: playerID}
-				if err := fetchPlayerData(playerID, &playerData); err != nil {
-					log.Printf("Failed to fetch prospect player %d: %v", playerID, err)
-				} else {
-					log.Printf("Cached prospect player %d", playerID)
-				}
-			}
-		}
-
-		// Enqueue player warming for these prospect players so the warmer will
-		// populate the `player:<id>` cache using the same GetPlayer logic.
+		// Instead of fetching each player's data inline (which can trigger
+		// upstream rate limits), only enqueue individual `player:<id>` warm
+		// keys so the queue warmer handles player caching with concurrency
+		// controls and backoff.
 		if redisClient != nil {
 			for _, playerID := range allProspectIDs {
 				pKey := fmt.Sprintf("player:%d", playerID)
 				if err := enqueueWarmKey(pKey); err != nil {
 					log.Printf("GetProspects: failed to enqueue warm key %s: %v", pKey, err)
 				}
-				// small pause to avoid hammering upstream when many prospects are present
-				time.Sleep(50 * time.Millisecond)
+				// small pause to avoid a tight enqueue loop
+				time.Sleep(25 * time.Millisecond)
 			}
+			log.Printf("GetProspects: enqueued %d player warm keys for %s", len(allProspectIDs), teamAbbrev)
 		}
 	} else {
 		log.Printf("Failed to parse prospects response for caching: %v", err)
 	}
 
-	// Cache the prospects response
-	if setErr := setCachedRaw(cacheKey, data, time.Hour); setErr != nil {
+	// Build a combined `players` array (roster-like) including any warmed
+	// `player:<id>` cached data we have available so the UI can behave like
+	// the roster endpoint (and sort by draft position).
+	var original map[string]interface{}
+	if err := json.Unmarshal(data, &original); err != nil {
+		// If we can't unmarshal original, just cache and return original bytes
+		if setErr := setCachedRaw(cacheKey, data, time.Hour); setErr != nil {
+			log.Printf("Failed to cache prospects for %s: %v", teamAbbrev, setErr)
+		}
+		return data, nil
+	}
+
+	// Build `players` array (preserving upstream fields) and attach it to the
+	// original payload. Sorting / extraction of `overallPick` is handled in
+	// the helper for clarity.
+	players := buildPlayersFromOriginal(original, []string{"forwards", "defensemen", "goalies"})
+	original["players"] = players
+
+	newData, jerr := json.Marshal(original)
+	if jerr != nil {
+		// Fallback to original bytes if marshal fails
+		if setErr := setCachedRaw(cacheKey, data, time.Hour); setErr != nil {
+			log.Printf("Failed to cache prospects for %s: %v", teamAbbrev, setErr)
+		}
+		return data, nil
+	}
+
+	// Cache the augmented prospects response (includes `players`)
+	if setErr := setCachedRaw(cacheKey, newData, time.Hour); setErr != nil {
 		log.Printf("Failed to cache prospects for %s: %v", teamAbbrev, setErr)
 	}
 
-	return data, nil
+	return newData, nil
+}
+
+// buildPlayersFromOriginal constructs a roster-like `players` slice from the
+// raw prospects payload. It preserves all upstream fields and, when available,
+// surfaces a warmed `draftDetails.overallPick` from `player:<id>` cache entries.
+func buildPlayersFromOriginal(original map[string]interface{}, sections []string) []map[string]interface{} {
+	var players []map[string]interface{}
+	inlineFetches := 0
+
+	for _, section := range sections {
+		raw, ok := original[section]
+		if !ok {
+			continue
+		}
+		list, ok := raw.([]interface{})
+		if !ok {
+			continue
+		}
+
+		for _, item := range list {
+			pm, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			// Shallow copy original prospect map so we keep all upstream fields
+			m := make(map[string]interface{}, len(pm)+1)
+			for k, v := range pm {
+				m[k] = v
+			}
+
+			// Extract numeric id (JSON numbers are float64)
+			id := 0
+			if vid, ok := pm["id"]; ok {
+				switch t := vid.(type) {
+				case float64:
+					id = int(t)
+				case int:
+					id = t
+				}
+			}
+
+			// Try to pull warmed player data to surface overallPick. First
+			// check local Redis cache; if missing and we haven't exceeded
+			// the inline fetch cap, attempt a limited synchronous GetPlayer
+			// which uses the shared backoff/path and will populate the
+			// player cache for subsequent requests.
+			foundPick := false
+			if id > 0 {
+				if redisClient != nil {
+					if cached, err := getCachedRaw(fmt.Sprintf("player:%d", id)); err == nil {
+						var cp map[string]interface{}
+						if err := json.Unmarshal(cached, &cp); err == nil {
+							if dd, ok := cp["draftDetails"].(map[string]interface{}); ok {
+								if op, ok := dd["overallPick"]; ok {
+									switch v := op.(type) {
+									case float64:
+										m["overallPick"] = int(v)
+									default:
+										m["overallPick"] = v
+									}
+									foundPick = true
+								}
+							}
+						}
+					}
+				}
+
+				// If we didn't find a pick in cache, try a limited synchronous
+				// fetch to populate the cache and obtain draftDetails. This is
+				// intentionally bounded to avoid reintroducing rate-limit bursts.
+				if !foundPick && inlineFetches < MaxInlinePlayerFetches {
+					inlineFetches++
+					if pdata, err := GetPlayer(fmt.Sprintf("%d", id)); err == nil {
+						var cp map[string]interface{}
+						if err := json.Unmarshal(pdata, &cp); err == nil {
+							if dd, ok := cp["draftDetails"].(map[string]interface{}); ok {
+								if op, ok := dd["overallPick"]; ok {
+									switch v := op.(type) {
+									case float64:
+										m["overallPick"] = int(v)
+									default:
+										m["overallPick"] = v
+									}
+									foundPick = true
+								}
+							}
+						}
+					} else {
+						log.Printf("GetProspects: inline GetPlayer(%d) failed: %v", id, err)
+					}
+				}
+			}
+
+			if _, ok := m["overallPick"]; !ok {
+				m["overallPick"] = 999999
+			}
+
+			players = append(players, m)
+		}
+	}
+
+	sort.SliceStable(players, func(i, j int) bool {
+		vi, _ := players[i]["overallPick"].(int)
+		vj, _ := players[j]["overallPick"].(int)
+		return vi < vj
+	})
+
+	return players
 }
 
 // GetSchedule fetches the schedule for a given date and caches the raw payload.

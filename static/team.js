@@ -518,15 +518,22 @@ async function loadProspects() {
         }
         const data = await response.json();
         
-        // Combine all prospects
-        const prospects = [
-            ...(data.forwards || []),
-            ...(data.defensemen || []),
-            ...(data.goalies || [])
-        ];
+        // Prefer a roster-like `players` array if the server returned one
+        let prospects;
+        if (data.players && Array.isArray(data.players) && data.players.length > 0) {
+            prospects = data.players;
+        } else {
+            // Fallback to the original forwards/defensemen/goalies shape
+            prospects = [
+                ...(data.forwards || []),
+                ...(data.defensemen || []),
+                ...(data.goalies || [])
+            ];
+        }
         
-        // Display basic prospect info immediately
-        allProspects = prospects.map(p => ({ ...p, overallPick: 999999 }));
+        // Display basic prospect info immediately. If server supplied
+        // `overallPick` include it so sorting works immediately like roster.
+        allProspects = prospects.map(p => ({ ...p, overallPick: (p.overallPick ?? 999999) }));
         displayProspects(allProspects);
         prospectsLoading.textContent = 'Loading draft details...';
         
@@ -567,8 +574,7 @@ async function loadProspects() {
                 }
             });
             
-            // Sort and re-display after each batch
-            allProspects.sort((a, b) => a.overallPick - b.overallPick);
+            // Backend provides sorted order; just re-render with updated data
             displayProspects(allProspects);
             
             // Delay before next batch
