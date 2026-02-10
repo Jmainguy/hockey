@@ -143,8 +143,8 @@ func fetchBytesForWarmKey(key string) ([]byte, error) {
 	case strings.HasPrefix(key, "team-news:"):
 		// team-news:<id>
 		id := strings.TrimPrefix(key, "team-news:")
-		apiUrl := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-us/stories?tags.slug=teamid-%s&$limit=10", id)
-		resp, err := rateLimitedGet(apiUrl)
+		apiURL := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-us/stories?tags.slug=teamid-%s&$limit=10", id)
+		resp, err := rateLimitedGet(apiURL)
 		if err != nil {
 			return nil, err
 		}
@@ -711,6 +711,7 @@ func isAnyGameLive() (bool, error) {
 	return false, nil
 }
 
+// BaseURL is the upstream NHL API base URL.
 const (
 	BaseURL = "https://api-web.nhle.com/v1"
 )
@@ -768,8 +769,8 @@ type GameLanding struct {
 }
 
 // GetGameLanding fetches and decodes the game landing JSON into a typed struct
-func GetGameLanding(gameId string) (*GameLanding, error) {
-	url := fmt.Sprintf("%s/gamecenter/%s/landing", BaseURL, gameId)
+func GetGameLanding(gameID string) (*GameLanding, error) {
+	url := fmt.Sprintf("%s/gamecenter/%s/landing", BaseURL, gameID)
 	body, err := fetchURL(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch game landing: %w", err)
@@ -1052,17 +1053,17 @@ func GetAllTeams() (*TeamsResponse, error) {
 }
 
 // GetTeamDetails fetches team details including record and stats
-func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
+func GetTeamDetails(teamID string) (*TeamDetailsResponse, error) {
 	// Try cache first for team details
-	cacheKey := fmt.Sprintf("teamdetails:%s", strings.ToUpper(teamId))
+	cacheKey := fmt.Sprintf("teamdetails:%s", strings.ToUpper(teamID))
 
 	// Convert team ID to abbreviation
 	var teamAbbr string
 	teamIDInt := -1
-	// If teamId is numeric, use that id
-	if _, err := fmt.Sscanf(teamId, "%d", &teamIDInt); err != nil {
+	// If teamID is numeric, use that id
+	if _, err := fmt.Sscanf(teamID, "%d", &teamIDInt); err != nil {
 		// Not numeric: treat as abbreviation (e.g., "wpg")
-		teamAbbr = strings.ToUpper(teamId)
+		teamAbbr = strings.ToUpper(teamID)
 		if id, ok := abbrevToTeamID[teamAbbr]; ok {
 			teamIDInt = id
 		} else {
@@ -1077,13 +1078,13 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 		if abbr, ok := teamIDToAbbr[teamIDInt]; ok {
 			teamAbbr = abbr
 		} else {
-			return nil, fmt.Errorf("unknown team id: %s", teamId)
+			return nil, fmt.Errorf("unknown team id: %s", teamID)
 		}
 	}
 
 	// Check cache first for team details
 	if cachedData, err := getCachedRaw(cacheKey); err == nil {
-		log.Printf("Cache hit for team details %s", teamId)
+		log.Printf("Cache hit for team details %s", teamID)
 		var response TeamDetailsResponse
 		if err := json.Unmarshal(cachedData, &response); err == nil {
 			return &response, nil
@@ -1158,8 +1159,8 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 	}
 
 	for _, standing := range standingsResp.Standings {
-		if standing.TeamAbbrev.Default == teamAbbr || strings.EqualFold(standing.TeamAbbrev.Default, strings.ToUpper(teamId)) {
-			log.Printf("Looking up team details for input=%q resolvedAbbrev=%q", teamId, teamAbbr)
+		if standing.TeamAbbrev.Default == teamAbbr || strings.EqualFold(standing.TeamAbbrev.Default, strings.ToUpper(teamID)) {
+			log.Printf("Looking up team details for input=%q resolvedAbbrev=%q", teamID, teamAbbr)
 			// Build complete team details from standings
 			// Populate numeric ID from standings where possible
 			if id, ok := abbrevToTeamID[standing.TeamAbbrev.Default]; ok {
@@ -1321,10 +1322,10 @@ func GetTeamDetails(teamId string) (*TeamDetailsResponse, error) {
 	if cacheData, jsonErr := json.Marshal(response); jsonErr == nil {
 		if valid, reason := isValidForCache(cacheKey, cacheData); valid {
 			if setErr := setCachedRaw(cacheKey, cacheData, determineTTL("static")); setErr != nil {
-				log.Printf("Failed to cache team details for %s: %v", teamId, setErr)
+				log.Printf("Failed to cache team details for %s: %v", teamID, setErr)
 			}
 		} else {
-			log.Printf("Validation failed for team details %s; not caching: %s", teamId, reason)
+			log.Printf("Validation failed for team details %s; not caching: %s", teamID, reason)
 		}
 	}
 
@@ -1448,7 +1449,11 @@ func GetSchedule(date string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer body.Close()
+		defer func() {
+			if cerr := body.Close(); cerr != nil {
+				log.Printf("Error closing response body: %v", cerr)
+			}
+		}()
 		return io.ReadAll(body)
 	}, time.Hour)
 	if err != nil {
@@ -1458,22 +1463,26 @@ func GetSchedule(date string) ([]byte, error) {
 }
 
 // GetPlayer fetches the player landing JSON and caches the raw payload.
-func GetPlayer(playerId string) ([]byte, error) {
-	cacheKey := fmt.Sprintf("player:%s", playerId)
+func GetPlayer(playerID string) ([]byte, error) {
+	cacheKey := fmt.Sprintf("player:%s", playerID)
 
 	// Try cache first
 	if cachedData, err := getCachedRaw(cacheKey); err == nil {
-		log.Printf("Cache hit for player:%s", playerId)
+		log.Printf("Cache hit for player:%s", playerID)
 		return cachedData, nil
 	}
 
 	data, err := getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
-		url := fmt.Sprintf("%s/player/%s/landing", BaseURL, playerId)
+		url := fmt.Sprintf("%s/player/%s/landing", BaseURL, playerID)
 		body, err := fetchURL(url)
 		if err != nil {
 			return nil, err
 		}
-		defer body.Close()
+		defer func() {
+			if cerr := body.Close(); cerr != nil {
+				log.Printf("Error closing response body: %v", cerr)
+			}
+		}()
 		return io.ReadAll(body)
 	}, time.Hour)
 	if err != nil {
@@ -1622,24 +1631,24 @@ func getOrFetchPlayer(playerID int, basePlayer PlayerInfo) PlayerInfo {
 }
 
 // GetRoster fetches team roster with player stats
-func GetRoster(teamId string) (*RosterResponse, error) {
+func GetRoster(teamID string) (*RosterResponse, error) {
 	// Convert team ID or abbreviation into the canonical abbreviation we use
 	var teamAbbr string
 	teamIDInt := -1
 	// If numeric ID provided, resolve to canonical abbreviation
-	if _, err := fmt.Sscanf(teamId, "%d", &teamIDInt); err == nil {
+	if _, err := fmt.Sscanf(teamID, "%d", &teamIDInt); err == nil {
 		if abbr, ok := teamIDToAbbr[teamIDInt]; ok {
 			teamAbbr = abbr
 		} else {
 			// Unknown numeric ID (likely an international/Olympic team). Fall back to
 			// treating the provided identifier as an abbreviation so the non-NHL
 			// fallback below can return an empty roster instead of an error.
-			log.Printf("Unknown numeric team id %s — falling back to treat as abbrev", teamId)
-			teamAbbr = strings.ToUpper(teamId)
+			log.Printf("Unknown numeric team id %s — falling back to treat as abbrev", teamID)
+			teamAbbr = strings.ToUpper(teamID)
 		}
 	} else {
 		// Not numeric: treat input as abbreviation (e.g., "wpg") and normalize
-		teamAbbr = strings.ToUpper(teamId)
+		teamAbbr = strings.ToUpper(teamID)
 	}
 
 	// If the abbreviation is not a known NHL team, assume it's an international/Olympic team
@@ -1654,7 +1663,7 @@ func GetRoster(teamId string) (*RosterResponse, error) {
 
 	// Check cache first
 	if cachedData, err := getCachedRaw(cacheKey); err == nil {
-		log.Printf("Cache hit for roster %s", teamId)
+		log.Printf("Cache hit for roster %s", teamID)
 		// Try the already-serialized RosterResponse shape (players array)
 		var response RosterResponse
 		if err := json.Unmarshal(cachedData, &response); err == nil {
@@ -1726,7 +1735,7 @@ func GetRoster(teamId string) (*RosterResponse, error) {
 		}
 
 		// If we get here, cached data wasn't usable — delete and fall through to fetch
-		log.Printf("Cached roster for %s is empty/null or unrecognized — treating as cache miss and deleting key", teamId)
+		log.Printf("Cached roster for %s is empty/null or unrecognized — treating as cache miss and deleting key", teamID)
 		if redisClient != nil {
 			_ = redisClient.Del(redisCtx, cacheKey).Err()
 		}
@@ -1739,7 +1748,11 @@ func GetRoster(teamId string) (*RosterResponse, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer body.Close()
+		defer func() {
+			if cerr := body.Close(); cerr != nil {
+				log.Printf("Error closing response body: %v", cerr)
+			}
+		}()
 		return io.ReadAll(body)
 	}, determineTTL("roster")) // Rosters are static for the season (dynamic TTL)
 
