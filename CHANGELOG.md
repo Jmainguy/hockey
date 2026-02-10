@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.2](https://github.com/Jmainguy/hockey/compare/v1.11.1...v1.11.2) (2026-02-10)
+
+
+### Bug Fixes
+
+* update prospects loading ([663a673](https://github.com/Jmainguy/hockey/commit/663a6737c7ffa7a05dc14633fdf9cf0209352de7))
+
 ## [1.11.1](https://github.com/Jmainguy/hockey/compare/v1.11.0...v1.11.1) (2026-02-10)
 
 
