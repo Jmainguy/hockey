@@ -180,9 +180,16 @@ func startQueueWarmer() {
 	go func() {
 		// Try to acquire a long-running lock for the warmer
 		lockKey := "cache-warmer-lock"
-		set, err := redisClient.SetNX(redisCtx, lockKey, fmt.Sprintf("%d", time.Now().Unix()), 15*time.Minute).Result()
-		if err != nil || !set {
+		_, err := redisClient.SetArgs(redisCtx, lockKey, fmt.Sprintf("%d", time.Now().Unix()), redis.SetArgs{
+			Mode: "NX",
+			TTL:  15 * time.Minute,
+		}).Result()
+		if err == redis.Nil {
 			log.Println("Another instance is already running the queue warmer, skipping")
+			return
+		}
+		if err != nil {
+			log.Printf("Failed to acquire queue warmer lock: %v", err)
 			return
 		}
 		defer redisClient.Del(redisCtx, lockKey)
@@ -232,7 +239,12 @@ func startQueueWarmer() {
 		for {
 			// Move due scheduled items from ZSET to queue
 			now := time.Now().Unix()
-			due, err := redisClient.ZRangeByScore(redisCtx, "warm:scheduled", &redis.ZRangeBy{Min: "-inf", Max: fmt.Sprintf("%d", now)}).Result()
+			due, err := redisClient.ZRangeArgs(redisCtx, redis.ZRangeArgs{
+				Key:     "warm:scheduled",
+				Start:   "-inf",
+				Stop:    fmt.Sprintf("%d", now),
+				ByScore: true,
+			}).Result()
 			if err == nil && len(due) > 0 {
 				pipe := redisClient.TxPipeline()
 				// remove these members from scheduled set
@@ -399,7 +411,7 @@ func getCachedOrFetchWithBackoff(cacheKey string, fetchFunc func() ([]byte, erro
 	waitTimeout := 30 * time.Second
 	if redisClient != nil {
 		// Try to acquire lock immediately
-		if set, err := redisClient.SetNX(redisCtx, lockKey, "1", lockTTL).Result(); err == nil && set {
+		if _, err := redisClient.SetArgs(redisCtx, lockKey, "1", redis.SetArgs{Mode: "NX", TTL: lockTTL}).Result(); err == nil {
 			holdLock = true
 			log.Printf("Acquired inflight lock for %s", cacheKey)
 		} else {
@@ -413,7 +425,7 @@ func getCachedOrFetchWithBackoff(cacheKey string, fetchFunc func() ([]byte, erro
 				time.Sleep(pollInterval)
 			}
 			// After waiting, try to take over the lock in case the other worker died
-			if set, err := redisClient.SetNX(redisCtx, lockKey, "1", lockTTL).Result(); err == nil && set {
+			if _, err := redisClient.SetArgs(redisCtx, lockKey, "1", redis.SetArgs{Mode: "NX", TTL: lockTTL}).Result(); err == nil {
 				holdLock = true
 				log.Printf("Took over inflight lock for %s after waiting", cacheKey)
 			} else {
