@@ -224,6 +224,22 @@ Contributions are welcome! Feel free to:
 - Submit pull requests for improvements
 - Share feedback and suggestions
 
+### Commit messages (Conventional Commits)
+
+This repository uses **[Conventional Commits](https://www.conventionalcommits.org/)**. Pull request titles and commit messages should follow that format so automated releases and changelogs stay correct.
+
+**Common types:** `feat` (new behavior), `fix` (bug fixes), `docs`, `chore`, `refactor`, `test`, `ci`, `perf`, `build`. Add a scope in parentheses if it helps, e.g. `feat(api): add playoff bracket endpoint`.
+
+**Examples:**
+
+- `feat: add playoff series schedule page`
+- `fix: handle empty standings during playoffs`
+- `docs: update API section in README`
+
+Breaking changes can be noted in the footer or with `!` after the type (e.g. `feat!: remove legacy endpoint`) per the spec.
+
+Pushes to `main` with appropriate conventional commits trigger new releases via the project’s release workflow.
+
 ---
 
 **Built with ❤️ for NHL fans everywhere**
