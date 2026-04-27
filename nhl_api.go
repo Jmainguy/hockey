@@ -976,11 +976,6 @@ func currentSeasonID() string {
 	return fmt.Sprintf("%d%d", startYear, endYear)
 }
 
-// getStandingsDate returns today's date in YYYY-MM-DD format
-func getStandingsDate() string {
-	return time.Now().Format("2006-01-02")
-}
-
 // hasNonEmptyStandingsJSON returns true if the JSON contains a non-empty "standings" array.
 func hasNonEmptyStandingsJSON(data []byte) bool {
 	var s struct {
@@ -1004,9 +999,7 @@ func standingLookupOffsets() []int {
 	for d := 50; d < 100; d += 5 {
 		o = append(o, d)
 	}
-	for _, d := range []int{100, 110, 120, 135, 150, 200} {
-		o = append(o, d)
-	}
+	o = append(o, []int{100, 110, 120, 135, 150, 200}...)
 	return o
 }
 
