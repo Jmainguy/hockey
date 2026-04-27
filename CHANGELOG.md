@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/Jmainguy/hockey/compare/v1.11.2...v1.12.0) (2026-04-27)
+
+
+### Features
+
+* document conventional commits in README ([6c57b4f](https://github.com/Jmainguy/hockey/commit/6c57b4f976ade0c1c19a53ba317b663f4b4fa787))
+
 ## [1.11.2](https://github.com/Jmainguy/hockey/compare/v1.11.1...v1.11.2) (2026-02-10)
 
 
