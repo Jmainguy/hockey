@@ -557,6 +557,36 @@ func isValidForCache(cacheKey string, data []byte) (bool, string) {
 		return true, ""
 	}
 
+	// Per-series playoff schedule (games in a series)
+	if strings.HasPrefix(cacheKey, "psched:") {
+		var s struct {
+			SeriesLetter string            `json:"seriesLetter"`
+			Games        []json.RawMessage `json:"games"`
+		}
+		if err := json.Unmarshal(data, &s); err != nil {
+			reason := fmt.Sprintf("unmarshal error: %v", err)
+			log.Printf("psched validation unmarshal error for %s: %v", cacheKey, err)
+			return false, reason
+		}
+		if s.SeriesLetter == "" {
+			return false, "seriesLetter empty"
+		}
+		return true, ""
+	}
+
+	// Playoff bracket JSON must include a `series` array (may be empty in the off-season).
+	if strings.HasPrefix(cacheKey, "playoff-bracket:") {
+		var b struct {
+			Series []json.RawMessage `json:"series"`
+		}
+		if err := json.Unmarshal(data, &b); err != nil {
+			reason := fmt.Sprintf("unmarshal error: %v", err)
+			log.Printf("playoff-bracket validation unmarshal error for %s: %v", cacheKey, err)
+			return false, reason
+		}
+		return true, ""
+	}
+
 	// Standings should contain a `standings` array
 	if strings.HasPrefix(cacheKey, "standings:") {
 		var s struct {
@@ -654,6 +684,16 @@ func determineTTL(resource string) time.Duration {
 	}
 
 	switch resource {
+	case "playoff-bracket":
+		if live {
+			return 2 * time.Minute
+		}
+		return 30 * time.Minute
+	case "psched":
+		if live {
+			return 2 * time.Minute
+		}
+		return 15 * time.Minute
 	case "standings":
 		if live {
 			return 5 * time.Minute
@@ -941,16 +981,87 @@ func getStandingsDate() string {
 	return time.Now().Format("2006-01-02")
 }
 
-// GetAllTeams fetches all NHL teams from standings
-func GetAllTeams() (*TeamsResponse, error) {
-	standingsDate := getStandingsDate()
-	cacheKey := fmt.Sprintf("standings:%s", standingsDate)
+// hasNonEmptyStandingsJSON returns true if the JSON contains a non-empty "standings" array.
+func hasNonEmptyStandingsJSON(data []byte) bool {
+	var s struct {
+		Standings []json.RawMessage `json:"standings"`
+	}
+	if err := json.Unmarshal(data, &s); err != nil {
+		return false
+	}
+	return len(s.Standings) > 0
+}
 
-	// Try cache first, then fetch with backoff if needed
-	data, err := getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
-		// Use date-based standings endpoint (e.g., /standings/2025-11-23)
-		url := fmt.Sprintf("%s/standings/%s", BaseURL, standingsDate)
+// standingLookupOffsets is the order in which we try /standings/{date} for team lists. The API
+// often returns an empty "standings" list during the playoffs, so we walk from today backward;
+// 0-45 covers typical “last two weeks of the regular season” without huge jumps, then we try
+// sparser days for edge cases. One ordered slice (no deduping) keeps behavior predictable.
+func standingLookupOffsets() []int {
+	o := make([]int, 0, 80)
+	for d := 0; d < 46; d++ {
+		o = append(o, d)
+	}
+	for d := 50; d < 100; d += 5 {
+		o = append(o, d)
+	}
+	for _, d := range []int{100, 110, 120, 135, 150, 200} {
+		o = append(o, d)
+	}
+	return o
+}
 
+// getStandingsPayloadForUI fetches the most recent /standings/{date} that still has row data.
+// During the playoffs the same-day endpoint often returns {"standings":[]}, which breaks
+// the home team grid unless we walk back to the end of the regular season.
+func getStandingsPayloadForUI() ([]byte, error) {
+	now := time.Now().UTC()
+	ttl := determineTTL("standings")
+	for _, dayOff := range standingLookupOffsets() {
+		date := now.AddDate(0, 0, -dayOff).Format("2006-01-02")
+		cacheKey := fmt.Sprintf("standings:%s", date)
+		if cached, err := getCachedRaw(cacheKey); err == nil && hasNonEmptyStandingsJSON(cached) {
+			return cached, nil
+		}
+		data, err := getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
+			url := fmt.Sprintf("%s/standings/%s", BaseURL, date)
+			body, err := fetchURL(url)
+			if err != nil {
+				return nil, err
+			}
+			defer func() {
+				if cerr := body.Close(); cerr != nil {
+					log.Printf("Error closing response body: %v", cerr)
+				}
+			}()
+			return io.ReadAll(body)
+		}, ttl)
+		if err != nil {
+			log.Printf("getStandingsPayloadForUI: standings %s: %v", date, err)
+			continue
+		}
+		if hasNonEmptyStandingsJSON(data) {
+			return data, nil
+		}
+	}
+	return nil, fmt.Errorf("no non-empty NHL standings found (tried fallback dates)")
+}
+
+// playoffBracketCalendarYear returns the year used in /playoff-bracket/{year}
+// (spring year of the Stanley Cup for the current season, e.g. 2025 for 2024-25).
+func playoffBracketCalendarYear() int {
+	now := time.Now().UTC()
+	if now.Month() >= time.September {
+		return now.Year() + 1
+	}
+	return now.Year()
+}
+
+// GetPlayoffBracketJSON fetches the league playoff bracket (series, wins, team logos).
+func GetPlayoffBracketJSON() ([]byte, error) {
+	year := playoffBracketCalendarYear()
+	cacheKey := fmt.Sprintf("playoff-bracket:%d", year)
+	return getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
+		url := fmt.Sprintf("%s/playoff-bracket/%d", BaseURL, year)
 		body, err := fetchURL(url)
 		if err != nil {
 			return nil, err
@@ -960,10 +1071,40 @@ func GetAllTeams() (*TeamsResponse, error) {
 				log.Printf("Error closing response body: %v", cerr)
 			}
 		}()
-
 		return io.ReadAll(body)
-	}, determineTTL("standings")) // Cache standings with dynamic TTL
+	}, determineTTL("playoff-bracket"))
+}
 
+// GetPlayoffSeriesScheduleJSON fetches all games in a playoff series (season = 8 digits e.g. 20252026, seriesLetter = A–H etc.).
+func GetPlayoffSeriesScheduleJSON(seasonID, seriesLetter string) ([]byte, error) {
+	seasonID = strings.TrimSpace(seasonID)
+	seriesLetter = strings.TrimSpace(seriesLetter)
+	if len(seasonID) != 8 {
+		return nil, fmt.Errorf("invalid seasonId (want 8 digits): %q", seasonID)
+	}
+	if seriesLetter == "" {
+		return nil, fmt.Errorf("seriesLetter required")
+	}
+	letter := strings.ToUpper(seriesLetter[:1])
+	cacheKey := fmt.Sprintf("psched:%s:%s", seasonID, letter)
+	return getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
+		url := fmt.Sprintf("%s/schedule/playoff-series/%s/%s", BaseURL, seasonID, letter)
+		body, err := fetchURL(url)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			if cerr := body.Close(); cerr != nil {
+				log.Printf("Error closing response body: %v", cerr)
+			}
+		}()
+		return io.ReadAll(body)
+	}, determineTTL("psched"))
+}
+
+// GetAllTeams fetches all NHL teams from standings
+func GetAllTeams() (*TeamsResponse, error) {
+	data, err := getStandingsPayloadForUI()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get standings data: %w", err)
 	}
@@ -1099,24 +1240,8 @@ func GetTeamDetails(teamID string) (*TeamDetailsResponse, error) {
 		log.Printf("Failed to unmarshal cached team details: %v", err)
 	}
 
-	// Cache miss - fetch standings data with backoff
-	standingsDate := getStandingsDate()
-	standingsCacheKey := fmt.Sprintf("standings:%s", standingsDate)
-
-	data, err := getCachedOrFetchWithBackoff(standingsCacheKey, func() ([]byte, error) {
-		url := fmt.Sprintf("%s/standings/%s", BaseURL, standingsDate)
-		body, err := fetchURL(url)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if cerr := body.Close(); cerr != nil {
-				log.Printf("Error closing response body: %v", cerr)
-			}
-		}()
-		return io.ReadAll(body)
-	}, determineTTL("standings"))
-
+	// Use the same standings resolution as the home page (handles playoffs when same-day standings are empty).
+	data, err := getStandingsPayloadForUI()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get standings data: %w", err)
 	}

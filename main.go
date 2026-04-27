@@ -41,7 +41,10 @@ func main() {
 	router.HandleFunc("/coach", handleCoach).Methods("GET")
 	router.HandleFunc("/player/{playerId}", handlePlayer).Methods("GET")
 	router.HandleFunc("/game/{gameId}", handleGamePage).Methods("GET")
+	router.HandleFunc("/playoff-series/{seasonId:[0-9]{8}}/{seriesLetter:[a-zA-Z]}", handlePlayoffSeriesPage).Methods("GET")
 	router.HandleFunc("/api/teams", handleAPITeams).Methods("GET")
+	router.HandleFunc("/api/playoff-bracket", handleAPIPlayoffBracket).Methods("GET")
+	router.HandleFunc("/api/schedule/playoff-series/{seasonId:[0-9]{8}}/{seriesLetter:[a-zA-Z]}", handleAPIPlayoffSeriesSchedule).Methods("GET")
 	router.HandleFunc("/api/team/{teamId}", handleAPITeamDetails).Methods("GET")
 	router.HandleFunc("/api/roster/{teamId}", handleAPIRoster).Methods("GET")
 	router.HandleFunc("/api/prospects/{teamAbbrev}", handleAPIProspects).Methods("GET")
@@ -104,6 +107,10 @@ func handleGamePage(w http.ResponseWriter, r *http.Request) {
 	serveEmbeddedFile(w, r, "game.html")
 }
 
+func handlePlayoffSeriesPage(w http.ResponseWriter, r *http.Request) {
+	serveEmbeddedFile(w, r, "playoff-series.html")
+}
+
 func handleTrivia(w http.ResponseWriter, r *http.Request) {
 	serveEmbeddedFile(w, r, "trivia.html")
 }
@@ -130,6 +137,52 @@ func handleAPITeams(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := teams.WriteJSON(w); err != nil {
 		log.Printf("Error writing teams JSON: %v", err)
+	}
+}
+
+func handleAPIPlayoffBracket(w http.ResponseWriter, r *http.Request) {
+	data, err := GetPlayoffBracketJSON()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		if _, werr := w.Write(data); werr != nil {
+			log.Printf("Error writing playoff bracket JSON: %v", werr)
+		}
+		return
+	}
+	payload["seasonId"] = currentSeasonID()
+	out, err := json.Marshal(payload)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		if _, werr := w.Write(data); werr != nil {
+			log.Printf("Error writing playoff bracket JSON: %v", werr)
+		}
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(out); err != nil {
+		log.Printf("Error writing playoff bracket JSON: %v", err)
+	}
+}
+
+func handleAPIPlayoffSeriesSchedule(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	data, err := GetPlayoffSeriesScheduleJSON(vars["seasonId"], vars["seriesLetter"])
+	if err != nil {
+		if strings.Contains(err.Error(), "404") {
+			http.Error(w, "series not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(data); err != nil {
+		log.Printf("Error writing playoff series schedule JSON: %v", err)
 	}
 }
 
