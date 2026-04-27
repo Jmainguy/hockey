@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.12.1](https://github.com/Jmainguy/hockey/compare/v1.12.0...v1.12.1) (2026-04-27)
+
+
+### Bug Fixes
+
+* **deps:** update module golang.org/x/time to v0.15.0 ([4068936](https://github.com/Jmainguy/hockey/commit/4068936c133595b1d84af440e6f6a1657779be81))
+* **deps:** update module golang.org/x/time to v0.15.0 ([e34f182](https://github.com/Jmainguy/hockey/commit/e34f1825bca3d594fab997ce596122d474a716f8))
+* replace deprecated redis SetNX and ZRangeByScore ([fbeb6aa](https://github.com/Jmainguy/hockey/commit/fbeb6aab5c8d09ad1674a05b529ad61ac479f5bf))
+
 ## [1.12.0](https://github.com/Jmainguy/hockey/compare/v1.11.2...v1.12.0) (2026-04-27)
 
 
