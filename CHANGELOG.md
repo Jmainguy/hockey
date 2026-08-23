@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/Jmainguy/hockey/compare/v1.12.1...v1.13.0) (2026-08-23)
+
+
+### Features
+
+* roll over to the 2026-27 NHL season ([fcccaea](https://github.com/Jmainguy/hockey/commit/fcccaea411758453288767f21e5fd83facab2c02))
+
 ## [1.12.1](https://github.com/Jmainguy/hockey/compare/v1.12.0...v1.12.1) (2026-04-27)
 
 
