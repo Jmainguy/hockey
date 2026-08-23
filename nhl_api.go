@@ -972,13 +972,17 @@ func init() {
 	}
 }
 
-// currentSeasonID returns the active NHL season ID like 20252026.
-// Season rolls over on September 1: months Sep-Dec belong to currentYear-nextYear.
+// currentSeasonID returns the active NHL season ID like 20262027.
+// The NHL league year rolls over on July 1, when offseason roster movement
+// begins and the API exposes the upcoming season's roster and schedule.
 func currentSeasonID() string {
-	now := time.Now().UTC()
+	return seasonIDAt(time.Now().UTC())
+}
+
+func seasonIDAt(now time.Time) string {
 	year := now.Year()
 	var startYear, endYear int
-	if now.Month() >= time.September { // new season starts in September
+	if now.Month() >= time.July {
 		startYear = year
 		endYear = year + 1
 	} else {

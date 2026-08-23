@@ -35,7 +35,7 @@ A beautiful, real-time web application for NHL fans to explore teams, view curre
 ## 🏗️ Architecture
 
 ### Backend
-- **Language**: Go 1.21+
+- **Language**: Go 1.27+
 - **Framework**: Gorilla Mux (routing)
 - **API Integration**: NHL Stats API v1 (https://api-web.nhle.com/v1)
 - **Deployment**: Docker via ko with embedded static assets
@@ -245,4 +245,3 @@ Pushes to `main` with appropriate conventional commits trigger new releases via 
 **Built with ❤️ for NHL fans everywhere**
 
 *Go support your local team!*
-
