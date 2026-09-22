@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.1](https://github.com/Jmainguy/hockey/compare/v1.14.0...v1.14.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* **ui:** improve score order and contrast and remove cache notices ([d7f45e0](https://github.com/Jmainguy/hockey/commit/d7f45e0716229c05e93919699f0946c0c835b85c))
+
 ## [1.14.0](https://github.com/Jmainguy/hockey/compare/v1.13.0...v1.14.0) (2026-09-22)
 
 
