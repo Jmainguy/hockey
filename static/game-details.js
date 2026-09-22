@@ -2,20 +2,7 @@
 
 // Return true when the landing payload represents a finished game.
 function isGameFinal(data) {
-    try {
-        if (!data) return false;
-        // Preferred indicator from explicit gameState when available
-        if (data.gameState && String(data.gameState).toUpperCase().startsWith('FINAL')) return true;
-        // Fallback: if status text suggests finality
-        const st = (data.statusText || '').toString().toLowerCase();
-        if (st === 'final' || st === 'final overtime' || st === 'final ot') return true;
-        // If the API returns secondsRemaining === 0 and the game is not LIVE, treat as final
-        const secs = data?.clock?.secondsRemaining;
-        if (typeof secs === 'number' && secs === 0 && String(data.gameState || '').toUpperCase() !== 'LIVE') return true;
-    } catch (e) {
-        // fall through
-    }
-    return false;
+    return ['OFF','FINAL','FINAL_OVERTIME','FINAL_SHOOTOUT'].includes(String(data?.gameState || '').toUpperCase());
 }
 
 // Radio player helpers
@@ -187,12 +174,12 @@ function displayGameDetailsHTML(data) {
 
     // prettier game summary header: left team / score center / right team
     let statusText = 'Final';
-    if (data.gameState === 'LIVE') statusText = 'Live';
+    if (['LIVE','CRIT'].includes(data.gameState)) statusText = 'Live';
     else if (data.gameState === 'PRE') statusText = 'Pregame';
     else if (data.gameState === 'FUT') statusText = 'Scheduled';
     const periodInfo = data.periodDescriptor ? `${data.periodDescriptor.periodType} ${data.periodDescriptor.number || ''}` : '';
     // status badge color
-    const statusClass = data.gameState === 'LIVE' ? 'bg-red-100 text-red-700' : (data.gameState === 'FUT' || data.gameState === 'PRE') ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-700';
+    const statusClass = ['LIVE','CRIT'].includes(data.gameState) ? 'bg-red-100 text-red-700' : (data.gameState === 'FUT' || data.gameState === 'PRE') ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-700';
 let detailsHTML = `
 <div class="flex flex-col gap-4 mb-6 pb-6 border-b">
 
@@ -210,7 +197,7 @@ let detailsHTML = `
                 ${teamName(homeTeam)}
             </div>
             <div class="text-xs text-gray-500">
-                SOG ${homeTeam.sog || 0}
+                ${isFutureGame ? 'Home' : 'SOG ' + (homeTeam.sog ?? '–')}
             </div>
         </div>
 
@@ -220,9 +207,9 @@ let detailsHTML = `
                     ${ (data && data.gameState && String(data.gameState).toUpperCase().startsWith('FINAL')) ? '' : (`<div id="gameClock" class="scoreboard-clock text-2xl md:text-3xl font-extrabold text-gray-800">${initialClock}</div>` + (initialPeriodText ? `<div id="gamePeriod" class="text-sm text-gray-500 mt-1">${initialPeriodText}</div>` : `<div id="gamePeriod" class="text-sm text-gray-500 mt-1"></div>`)) }
                 </div>
             <div class="flex items-center gap-2">
-                <span class="text-4xl font-extrabold text-gray-900">${homeTeam.score || 0}</span>
+                <span class="text-4xl font-extrabold text-gray-900">${isFutureGame ? '–' : (homeTeam.score ?? '–')}</span>
                 <span class="text-xl font-bold text-gray-400">–</span>
-                <span class="text-4xl font-extrabold text-gray-900">${awayTeam.score || 0}</span>
+                <span class="text-4xl font-extrabold text-gray-900">${isFutureGame ? '–' : (awayTeam.score ?? '–')}</span>
             </div>
 
             <div class="mt-1 flex items-center gap-2">
@@ -245,7 +232,7 @@ let detailsHTML = `
                 ${teamName(awayTeam)}
             </div>
             <div class="text-xs text-gray-500">
-                SOG ${awayTeam.sog || 0}
+                ${isFutureGame ? 'Away' : 'SOG ' + (awayTeam.sog ?? '–')}
             </div>
         </div>
     </div>
@@ -271,18 +258,18 @@ let detailsHTML = `
         detailsHTML += `
             <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 mb-6 border border-blue-200">
                 <h4 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    📅 Game Information
+                     Game Information
                 </h4>
                 <div class="space-y-3">
                     <div class="flex items-start gap-3">
-                        <div class="text-2xl">🕐</div>
+                        <div class="text-2xl"></div>
                         <div>
                             <div class="font-semibold text-gray-700">Start Time</div>
                             <div class="text-gray-600">${startTime}</div>
                         </div>
                     </div>
                     <div class="flex items-start gap-3">
-                        <div class="text-2xl">🏟️</div>
+                        <div class="text-2xl"></div>
                         <div>
                             <div class="font-semibold text-gray-700">Venue</div>
                             <div class="text-gray-600">${venue}</div>
@@ -291,7 +278,7 @@ let detailsHTML = `
                     <div class="mt-4">
                         <a href="${ticketUrl}" target="_blank" rel="noopener noreferrer" 
                            class="inline-flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-lg font-bold hover:bg-secondary transition shadow-md">
-                            🎟️ Buy Tickets
+                             Buy Tickets
                         </a>
                     </div>
                 </div>
@@ -302,7 +289,7 @@ let detailsHTML = `
         if (data.tvBroadcasts && data.tvBroadcasts.length > 0) {
             detailsHTML += `
                 <div class="bg-gray-50 rounded-lg p-4 mb-6">
-                    <h4 class="text-md font-bold text-gray-800 mb-3">📺 Broadcast Information</h4>
+                    <h4 class="text-md font-bold text-gray-800 mb-3"> Broadcast Information</h4>
                     <div class="space-y-2">
             `;
             
@@ -329,7 +316,7 @@ let detailsHTML = `
             detailsHTML += `
                 <div class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
                     <h4 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        🌟 Skater Leaders
+                         Skater Leaders
                         <span class="text-xs font-normal text-gray-500">(${displayContext})</span>
                     </h4>
                     <div class="space-y-4">
@@ -391,7 +378,7 @@ let detailsHTML = `
                 detailsHTML += `
                     <div class="bg-white rounded-lg border border-gray-200 p-6 mb-6">
                         <h4 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                            🥅 Goalie Comparison
+                             Goalie Comparison
                             <span class="text-xs font-normal text-gray-500">(${displayContext})</span>
                         </h4>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -496,7 +483,7 @@ let detailsHTML = `
         `;
         
         data.summary.threeStars.forEach(player => {
-            const starEmoji = player.star === 1 ? '🥇' : player.star === 2 ? '🥈' : '🥉';
+            const starEmoji = player.star === 1 ? '' : player.star === 2 ? '' : '';
             const stats = player.position === 'G' 
                 ? `${player.savePctg ? (player.savePctg * 100).toFixed(1) + '% SV' : 'Goalie'}`
                 : `${player.goals || 0}G ${player.assists || 0}A ${player.points || 0}P`;
@@ -542,7 +529,7 @@ let detailsHTML = `
     if (shootoutData && Array.isArray(shootoutData) && shootoutData.length > 0) {
         detailsHTML += `
             <div class="mb-6">
-                <h4 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">🔔 Shootout Highlights</h4>
+                <h4 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"> Shootout Highlights</h4>
                 <div class="space-y-2">
         `;
 
@@ -572,7 +559,7 @@ let detailsHTML = `
     if (topClips && Array.isArray(topClips) && topClips.length > 0) {
         detailsHTML += `
             <div class="mb-6">
-                <h4 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">🔔 Shootout / Extra Clips</h4>
+                <h4 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"> Shootout / Extra Clips</h4>
                 <div class="space-y-2">
         `;
 
@@ -598,7 +585,7 @@ let detailsHTML = `
         detailsHTML += `
             <div class="mb-6">
                 <h4 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    🎯 Scoring Summary
+                     Scoring Summary
                 </h4>
                 <div class="space-y-3">
         `;
@@ -658,7 +645,7 @@ let detailsHTML = `
                                 <div class="font-bold"><a href="/player/${scorerId || ''}" class="underline">${scorerName}</a> (${goal.goalsToDate || 0}) ${strengthBadge}</div>
                                 ${assists ? `<div class="text-gray-600 text-xs mt-1">Assists: ${assists}</div>` : ''}
                                 <div class="text-gray-500 text-xs mt-1">${shotType ? shotType + ' shot' : ''}</div>
-                                ${highlightUrl ? `<div class="mt-2"><a href="${highlightUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs bg-primary text-white px-3 py-1 rounded hover:bg-secondary transition">🎥 Watch Highlight</a></div>` : ''}
+                                ${highlightUrl ? `<div class="mt-2"><a href="${highlightUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs bg-primary text-white px-3 py-1 rounded hover:bg-secondary transition"> Watch Highlight</a></div>` : ''}
                                 ${discreteClipId ? `<div class="mt-2"><a href="https://players.brightcove.net/6415718365001/EXtG1xJ7H_default/index.html?videoId=${discreteClipId}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs bg-primary text-white px-3 py-1 rounded hover:bg-secondary transition">▶ Watch Clip</a></div>` : ''}
                             </div>
                             <div class="text-right flex-shrink-0">
@@ -687,7 +674,7 @@ let detailsHTML = `
         detailsHTML += `
             <div class="mb-6">
                 <h4 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    🚨 Penalties
+                     Penalties
                 </h4>
                 <div class="space-y-3">
         `;
@@ -772,7 +759,7 @@ async function hydrateThreeStarNames() {
                     a.textContent = window.__threeStarNameCache[id];
                     continue;
                 }
-                const resp = await fetch(`/api/player/${id}`);
+                const resp = await hockeyFetch(`/api/player/${id}`);
                 if (!resp.ok) continue;
                 const data = await resp.json();
                 const first = (data.firstName && data.firstName.default) ? data.firstName.default : (data.firstName || '');
@@ -788,11 +775,15 @@ async function hydrateThreeStarNames() {
 }
 
 // Polling helper: periodically refetch the landing endpoint and re-render the page
+let gameRequestRunning = false;
 async function fetchAndRenderGameLanding(gameId) {
+    if (document.hidden || gameRequestRunning) return;
+    gameRequestRunning = true;
     try {
-        const resp = await fetch(`/api/gamecenter/${gameId}/landing`);
+        const resp = await hockeyFetch(`/api/gamecenter/${gameId}/landing`);
         if (!resp.ok) return;
         const data = await resp.json();
+        if (isGameFinal(data)) stopPollingGameLanding();
 
         // Render main HTML first so elements exist
         const mainEl = document.getElementById('gameInner');
@@ -857,15 +848,14 @@ async function fetchAndRenderGameLanding(gameId) {
             }
         } catch (e) { /* ignore DOM errors */ }
     } catch (e) {
-        // ignore transient failures
-    }
+        // Keep the last successful scoreboard during a transient failure.
+    } finally { gameRequestRunning = false; }
 }
 
-function startPollingGameLanding(gameId, intervalSec = 10) {
+function startPollingGameLanding(gameId, intervalSec = 30) {
     try {
         stopPollingGameLanding();
-        // Immediately fetch and render once
-        fetchAndRenderGameLanding(gameId);
+
         window.__gameLandingPollInterval = setInterval(() => fetchAndRenderGameLanding(gameId), intervalSec * 1000);
     } catch (e) {
         // ignore
@@ -882,7 +872,7 @@ function stopPollingGameLanding() {
 // Fetch and render game videos (Condensed + Recap only)
 async function renderGameVideos(gameId) {
     try {
-        const resp = await fetch(`/api/videos/${gameId}`);
+        const resp = await hockeyFetch(`/api/videos/${gameId}`);
         if (!resp.ok) return;
         const videoData = await resp.json();
         const videosList = document.getElementById('videosList');
@@ -915,7 +905,7 @@ async function renderGameVideos(gameId) {
             const sub = (item.context && item.context.subtitle) || (item.fields && item.fields.sourceTitle) || item.guid || item.id || '';
             const broadcastTag = tags.find(t => t.slug && (t.slug === 'national-broadcast' || t.slug.endsWith('-broadcast')));
             const broadcastLabel = broadcastTag ? ` (${broadcastTag.title || broadcastTag.slug})` : '';
-            const meta = sub ? ` — ${sub}` : '';
+            const meta = sub ? ` · ${sub}` : '';
             const title = `${base}${meta}${broadcastLabel}`;
 
             const row = document.createElement('div');

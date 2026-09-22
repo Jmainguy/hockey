@@ -1,0 +1,12 @@
+{
+ "name": "barnwide",
+ "private": true,
+ "scripts": {
+  "build": "npx @tailwindcss/cli -i ./src/styles.css -o ./static/utilities.css --minify",
+  "check": "node --test tests/frontend.test.cjs"
+ },
+ "devDependencies": {
+  "@tailwindcss/cli": "^4.3.3",
+  "tailwindcss": "^4.3.3"
+ }
+}

@@ -33,7 +33,7 @@ function saveLineup() {
     });
     
     localStorage.setItem(`lineup_${teamId}`, JSON.stringify(lineup));
-    alert('✅ Lineup saved successfully!');
+    alert(' Lineup saved successfully!');
 }
 
 // Reset lineup
@@ -226,7 +226,7 @@ function assignPlayerToSlot(player, zone) {
     // Remove player on click
     playerCard.addEventListener('click', (e) => {
         e.stopPropagation();
-        zone.innerHTML = '<div class="text-center text-sm text-gray-400">Click to select</div>';
+        zone.innerHTML = '<div class="text-center text-sm text-gray-400">Add player</div>';
         delete zone.dataset.playerId;
     });
     
@@ -241,20 +241,20 @@ async function loadCoach() {
 
     try {
         // Fetch team details
-        const teamResponse = await fetch(`/api/team/${teamId}`);
+        const teamResponse = await hockeyFetch(`/api/team/${teamId}`);
         if (teamResponse.ok) {
             const teamData = await teamResponse.json();
             if (teamData.teams && teamData.teams.length > 0) {
                 const team = teamData.teams[0];
                 teamObj = team;
                 teamAbbrev = team.abbreviation;
-                try { document.title = `${team.name} — Coach`; } catch (e) {}
+                try { document.title = `${team.name} · Coach`; } catch (e) {}
                 if (window.populateSharedHeader) window.populateSharedHeader(team);
             }
         }
 
         // Fetch roster
-        const rosterResponse = await fetch(`/api/roster/${teamId}`);
+        const rosterResponse = await hockeyFetch(`/api/roster/${teamId}`);
         if (!rosterResponse.ok) {
             throw new Error('Failed to load roster');
         }

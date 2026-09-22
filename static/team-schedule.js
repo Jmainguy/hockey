@@ -1,4 +1,4 @@
-// NHL Fan Hub - Team Schedule Calendar
+// Barnwide - Team Schedule Calendar
 let currentTeamId = null;
 let currentTeamAbbrev = null;
 let currentTeamName = null;
@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function loadTeamInfo() {
     try {
-        const response = await fetch(`/api/team/${currentTeamId}`);
+        const response = await hockeyFetch(`/api/team/${currentTeamId}`);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
         
@@ -78,7 +78,7 @@ async function loadTeamInfo() {
             currentTeamAbbrev = team.abbreviation;
             currentTeamName = team.name;
             // set doc title
-            try { document.title = `${team.name} — Schedule`; } catch (e) {}
+            try { document.title = `${team.name} · Schedule`; } catch (e) {}
             // Use shared header populator
             if (window.populateSharedHeader) window.populateSharedHeader(teamObj, 'Schedule');
         }
@@ -110,7 +110,7 @@ async function loadSchedule(season = null) {
             ? `/api/team-schedule/${currentTeamId}`
             : `/api/team-schedule/${currentTeamId}?season=${season}`;
         
-        const response = await fetch(url);
+        const response = await hockeyFetch(url);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
         
@@ -408,7 +408,7 @@ async function showGameDetails(gameId) {
     modal.classList.remove('hidden');
     
     try {
-        const response = await fetch(`/api/gamecenter/${gameId}/landing`);
+        const response = await hockeyFetch(`/api/gamecenter/${gameId}/landing`);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
         

@@ -265,7 +265,7 @@
         if (isIntermission) {
             return (
                 '<span class="inline-flex items-center gap-2 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-semibold">' +
-                (isLiveOrCrit ? '<span class="animate-pulse">🟣</span> ' : '') +
+                (isLiveOrCrit ? '<span class="animate-pulse"></span> ' : '') +
                 esc(stateText) +
                 '</span>'
             );
@@ -273,7 +273,7 @@
         if (isLiveOrCrit) {
             return (
                 '<span class="inline-flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-bold">' +
-                '<span class="animate-pulse">🔴</span> ' +
+                '<span class="animate-pulse"></span> ' +
                 esc(stateText) +
                 '</span>'
             );
@@ -318,7 +318,7 @@
 
     /**
      * City + nickname on two lines (like game cards). Playoff series teams may have
-     * `name` but not `commonName` — we split "Carolina Hurricanes" when `placeName` is Carolina.
+     * `name` but not `commonName` · we split "Carolina Hurricanes" when `placeName` is Carolina.
      */
     function teamNameLinesForColumn(side, abbrevFallback) {
         if (!side) {
@@ -468,12 +468,12 @@
                 })
                 .join(', ');
             broadcastHTML =
-                '<div class="text-center text-xs text-gray-500 mt-3 flex items-center justify-center gap-2"><span>📺</span><span>' + esc(broadcasts) + '</span></div>';
+                '<div class="text-center text-xs text-gray-500 mt-3 flex items-center justify-center gap-2"><span></span><span>' + esc(broadcasts) + '</span></div>';
         }
 
         let venueHTML = '';
         if (g.venue && g.venue.default) {
-            venueHTML = '<div class="text-center text-xs text-gray-500 mt-1">📍 ' + esc(String(g.venue.default)) + '</div>';
+            venueHTML = '<div class="text-center text-xs text-gray-500 mt-1"> ' + esc(String(g.venue.default)) + '</div>';
         }
 
         return (
@@ -567,7 +567,7 @@
 
         const apiUrl = '/api/schedule/playoff-series/' + encodeURIComponent(p.seasonId) + '/' + encodeURIComponent(p.seriesLetter);
 
-        fetch(apiUrl)
+        hockeyFetch(apiUrl)
             .then((r) => {
                 if (!r.ok) {
                     throw new Error('HTTP ' + r.status);
@@ -586,9 +586,9 @@
                 const tFull = top && fullNameFor(top);
                 const bFull = bot && fullNameFor(bot);
                 if (tFull && bFull) {
-                    document.title = tFull + ' vs ' + bFull + ' — NHL Fan Hub';
+                    document.title = tFull + ' vs ' + bFull + ' · Barnwide';
                 } else if (tAb && bAb) {
-                    document.title = tAb + ' vs ' + bAb + ' — NHL Fan Hub';
+                    document.title = tAb + ' vs ' + bAb + ' · Barnwide';
                 }
                 const hero = document.getElementById('seriesPageHero');
                 if (hero) {

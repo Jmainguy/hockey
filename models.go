@@ -3,33 +3,40 @@ package main
 import (
 	"encoding/json"
 	"io"
+	"time"
 )
 
 // Team represents an NHL team
 type Team struct {
-	ID         int    `json:"id"`
-	Name       string `json:"name"`
-	Abbrev     string `json:"abbrev"`
-	Link       string `json:"link"`
-	Conference string `json:"conference"`
-	Division   string `json:"division"`
-	Record     struct {
+	Rank           int     `json:"rank"`
+	ConferenceRank int     `json:"conferenceRank"`
+	DivisionRank   int     `json:"divisionRank"`
+	PointPctg      float64 `json:"pointPctg"`
+	ID             int     `json:"id"`
+	Name           string  `json:"name"`
+	Abbrev         string  `json:"abbrev"`
+	Link           string  `json:"link"`
+	Conference     string  `json:"conference"`
+	Division       string  `json:"division"`
+	Record         struct {
 		Wins           int `json:"wins"`
 		Losses         int `json:"losses"`
 		OvertimeLosses int `json:"overtimeLosses"`
 		Points         int `json:"points"`
 	} `json:"record"`
-	GamesPlayed  int     `json:"gamesPlayed,omitempty"`
-	GoalsFor     int     `json:"goalsFor,omitempty"`
-	GoalsAgainst int     `json:"goalsAgainst,omitempty"`
-	GoalDiff     int     `json:"goalDiff,omitempty"`
+	GamesPlayed  int     `json:"gamesPlayed"`
+	GoalsFor     int     `json:"goalsFor"`
+	GoalsAgainst int     `json:"goalsAgainst"`
+	GoalDiff     int     `json:"goalDiff"`
 	LastTen      string  `json:"lastTen,omitempty"`
 	Streak       string  `json:"streak,omitempty"`
-	WinPct       float64 `json:"winPct,omitempty"`
+	WinPct       float64 `json:"winPct"`
 }
 
 // TeamDetails contains detailed team information
 type TeamDetails struct {
+	AsOf         string `json:"asOf,omitempty"`
+	Season       int    `json:"season,omitempty"`
 	ID           int    `json:"id"`
 	Name         string `json:"name"`
 	TeamName     string `json:"teamName"`
@@ -107,24 +114,30 @@ func pickName(nameMap map[string]string) string {
 
 // PlayerStats represents player statistics
 type PlayerStats struct {
-	Games          int     `json:"games,omitempty"`
-	Goals          int     `json:"goals,omitempty"`
-	Assists        int     `json:"assists,omitempty"`
-	Points         int     `json:"points,omitempty"`
-	GamesStarted   int     `json:"gamesStarted,omitempty"`
-	Wins           int     `json:"wins,omitempty"`
-	Losses         int     `json:"losses,omitempty"`
-	GoalsAgainst   int     `json:"goalsAgainst,omitempty"`
-	GAA            float64 `json:"gaa,omitempty"`
-	SavePercentage float64 `json:"savePercentage,omitempty"`
-	PlusMinus      int     `json:"plusMinus,omitempty"`
-	PIM            int     `json:"pim,omitempty"`
-	Shots          int     `json:"shots,omitempty"`
+	Games          int     `json:"games"`
+	Goals          int     `json:"goals"`
+	Assists        int     `json:"assists"`
+	Points         int     `json:"points"`
+	GamesStarted   int     `json:"gamesStarted"`
+	Wins           int     `json:"wins"`
+	Losses         int     `json:"losses"`
+	GoalsAgainst   int     `json:"goalsAgainst"`
+	GAA            float64 `json:"gaa"`
+	SavePercentage float64 `json:"savePercentage"`
+	PlusMinus      int     `json:"plusMinus"`
+	PIM            int     `json:"pim"`
+	Shots          int     `json:"shots"`
 }
 
 // TeamsResponse is the API response for teams endpoint
 type TeamsResponse struct {
-	Teams []Team `json:"teams"`
+	Teams              []Team    `json:"teams"`
+	StandingsAvailable bool      `json:"standingsAvailable"`
+	RegularSeasonStart string    `json:"regularSeasonStart,omitempty"`
+	AsOf               string    `json:"asOf,omitempty"`
+	Season             int       `json:"season,omitempty"`
+	UpdatedAt          time.Time `json:"updatedAt"`
+	Stale              bool      `json:"stale"`
 }
 
 // TeamDetailsResponse is the API response for team details
@@ -134,7 +147,11 @@ type TeamDetailsResponse struct {
 
 // RosterResponse contains roster information
 type RosterResponse struct {
-	Players []PlayerInfo `json:"players"`
+	GameType  int          `json:"gameType"`
+	Players   []PlayerInfo `json:"players"`
+	Season    int          `json:"season,omitempty"`
+	UpdatedAt time.Time    `json:"updatedAt"`
+	Stale     bool         `json:"stale"`
 }
 
 // WriteJSON writes the response as JSON

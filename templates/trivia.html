@@ -3,26 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trivia - NHL Fan Hub</title>
-    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <title>Trivia - Barnwide</title>
+    <link rel="icon" href="/static/favicon.ico?v=barnwide" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png?v=barnwide">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png?v=barnwide">
     <link rel="stylesheet" href="/static/style.css">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-    tailwind.config = {
-        theme: {
-            extend: {
-                colors: {
-                    primary: '#0d47a1',
-                    secondary: '#1565c0',
-                    accent: '#ffb300'
-                }
-            }
-        }
-    }
-    </script>
+    <link rel="stylesheet" href="/static/utilities.css">
+<link rel="stylesheet" href="/static/design.css">
+<script src="/static/site.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+<a class="skip-link" href="#mainContent">Skip to content</a>
+<nav class="site-nav" aria-label="Main navigation"><a class="brand" href="/"><img class="brand-arena" src="/static/barnwide-mark.png" width="64" height="44" alt=""><span>Barnwide</span></a><div class="nav-links"><a href="/">Teams</a><a href="/scores">Scores</a><a href="/standings">Standings</a></div></nav>
+<div id="dataStatus" class="data-status hidden" role="status"></div>
+
+    <div id="mainContent" class="max-w-4xl mx-auto px-4 sm:px-6 py-6">
         <div>
             <div id="teamHeaderContainer"></div>
             <div id="loading" class="text-center py-12 text-gray-500 text-lg">Loading trivia...</div>
@@ -44,7 +39,7 @@
                 <div class="bg-white rounded-2xl shadow-md p-8 relative overflow-hidden">
                     <!-- Background team logo -->
                     <div id="teamLogoBg" class="absolute inset-0 bg-contain bg-center bg-no-repeat opacity-10"></div>
-                    
+
                     <div class="relative z-10">
                         <div class="text-center mb-8">
                             <div class="inline-block relative">
@@ -86,9 +81,9 @@
                 </div>
 
                 <div id="completionSection" class="hidden bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-200 rounded-2xl shadow-md p-8 text-center">
-                    <div class="text-6xl mb-4">🎉</div>
+                    <div class="text-6xl mb-4"></div>
                     <h3 class="text-3xl font-bold text-green-900 mb-2">Trivia Complete!</h3>
-                    <p class="text-green-700 mb-6">You've gone through all the players on the roster.</p>
+
                     <div class="flex gap-4 justify-center">
                         <button id="restartBtn" class="px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition">
                             Start Over

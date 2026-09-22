@@ -25,7 +25,7 @@ async function loadTrivia() {
 
     try {
         // Fetch team details to get abbreviation and name
-        const teamResponse = await fetch(`/api/team/${teamId}`);
+        const teamResponse = await hockeyFetch(`/api/team/${teamId}`);
         if (teamResponse.ok) {
             const teamData = await teamResponse.json();
             if (teamData.teams && teamData.teams.length > 0) {
@@ -33,13 +33,13 @@ async function loadTrivia() {
                 teamObj = team;
                 teamAbbrev = team.abbreviation;
                 // Set page title and use shared header
-                try { document.title = `${team.name} — Trivia`; } catch (e) {}
+                try { document.title = `${team.name} · Trivia`; } catch (e) {}
                 if (window.populateSharedHeader) window.populateSharedHeader(team);
             }
         }
 
         // Fetch roster data - same as team page
-        const response = await fetch(`/api/roster/${teamId}`);
+        const response = await hockeyFetch(`/api/roster/${teamId}`);
         if (!response.ok) {
             throw new Error('Failed to load roster');
         }

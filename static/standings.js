@@ -1,11 +1,11 @@
 // NHL Standings Page
 let allTeams = [];
 let currentFilter = 'league';
-let sortState = { key: 'points', dir: 'desc' }; // default sort
+let sortState = { key: 'rank', dir: 'asc' }; // default sort
 let detailsModal = null;
 
 document.addEventListener('DOMContentLoaded', function() {
-    loadStandings();
+    // Season browser initializes the selected season.
     setupFilters();
 });
 
@@ -36,18 +36,41 @@ function setupFilters() {
     });
 }
 
-async function loadStandings() {
+let standingsRequest = 0;
+async function loadStandings(season = "", phase = "regular") {
+    const request = ++standingsRequest;
     const loading = document.getElementById('loading');
     const errorDiv = document.getElementById('error');
     const container = document.getElementById('standingsContainer');
 
+    const notice = document.getElementById('seasonNotice');
+    notice.hidden=true; notice.replaceChildren();
+    loading.style.display = ''; errorDiv.classList.add('hidden'); container.classList.add('hidden');
     try {
-        const response = await fetch('/api/teams');
+        const response = await hockeyFetch('/api/standings' + (season ? '?season='+season+'&phase='+phase : ''));
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
+        if (request !== standingsRequest) return;
         
+        if (!data.standingsAvailable) {
+            loading.style.display = 'none';
+            const start = data.regularSeasonStart;
+            const date = start && /^\d{4}-\d{2}-\d{2}$/.test(start) ? new Date(start+'T00:00:00') : null;
+            if (phase === 'regular' && date && date > new Date()) {
+                const message = document.createElement('p');
+                message.textContent = `The regular season begins ${date.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}.`;
+                const link = document.createElement('a');
+                link.href = '/scores?date='+encodeURIComponent(start);
+                link.textContent = 'Opening-day games →';
+                notice.append(message,link); notice.hidden=false;
+                return;
+            }
+            errorDiv.textContent = phase === 'preseason' ? 'No preseason results are available for this season.' : 'Regular-season standings are not available yet.';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
         if (data.teams && data.teams.length > 0) {
             allTeams = data.teams;
             loading.style.display = 'none';
@@ -57,9 +80,10 @@ async function loadStandings() {
             throw new Error('No teams data received');
         }
     } catch (error) {
+        if (request !== standingsRequest) return;
         console.error('Error loading standings:', error);
         loading.style.display = 'none';
-        errorDiv.textContent = `Error loading standings: ${error.message}`;
+        errorDiv.textContent = 'Standings are temporarily unavailable.';
         errorDiv.classList.remove('hidden');
     }
 }
@@ -94,7 +118,7 @@ function renderStandings() {
         let va, vb;
         switch (key) {
             case 'rank':
-                va = a._originalIndex || 0; vb = b._originalIndex || 0; break;
+                va = standingRank(a); vb = standingRank(b); break;
             case 'name':
                 va = (a.name || '').toLowerCase(); vb = (b.name || '').toLowerCase(); break;
             case 'gp':
@@ -133,7 +157,8 @@ function renderStandings() {
         }
         if (va < vb) return sortState.dir === 'asc' ? -1 : 1;
         if (va > vb) return sortState.dir === 'asc' ? 1 : -1;
-        // tiebreakers: points then wins
+        if (a.rank && b.rank) return a.rank - b.rank;
+        // Fallback for incomplete upstream ranking data
         if (a.record && b.record) {
             if (a.record.points !== b.record.points) return (a.record.points - b.record.points) * -1;
             if (a.record.wins !== b.record.wins) return (a.record.wins - b.record.wins) * -1;
@@ -159,7 +184,7 @@ function renderStandings() {
         
         row.innerHTML = `
             <td class="px-4 py-3 whitespace-nowrap">
-                <span class="text-lg font-bold text-gray-700">${index + 1}</span>
+                <span class="text-lg font-bold text-gray-700">${standingRank(team)}</span>
             </td>
             <td class="px-6 py-3 whitespace-nowrap">
                 <a href="/team/${(team.abbrev || '').toString().toLowerCase()}" class="flex items-center gap-3 hover:text-primary transition group">
@@ -191,19 +216,19 @@ function renderStandings() {
 
         // Mobile card
         if (cardsRoot) {
-            const a = document.createElement('a');
-            a.href = `/team/${(team.abbrev || '').toString().toLowerCase()}`;
+            const a = document.createElement('div');
             a.className = 'block';
             const card = document.createElement('div');
             // ultra-compact card for vertical list: minimal padding and gap
             card.className = 'bg-white rounded shadow p-1 flex items-center gap-2';
-            const left = document.createElement('div');
+            const left = document.createElement('a');
+            left.href = `/team/${(team.abbrev || '').toString().toLowerCase()}`;
             left.className = 'flex items-center gap-2 min-w-0';
             // smaller logo to save vertical space; fallback shows 3-letter abbrev
             const imgHtml = logoUrl ? `<img src="${logoUrl}" alt="${team.abbrev}" class="w-8 h-8 object-contain flex-shrink-0" onerror="this.style.display='none'">` : `<div class="w-8 h-8 bg-gray-100 flex items-center justify-center rounded text-xs">${(team.abbrev||'').substring(0,3).toUpperCase()}</div>`;
             // show rank then abbrev instead of full name on mobile to save space
             const abbrev = (team.abbrev || '').toUpperCase() || ((team.name||'').split(' ').slice(-1)[0] || '').toUpperCase();
-            const rankBadge = `<span class="text-sm font-bold text-gray-700 mr-2">#${index+1}</span>`;
+            const rankBadge = `<span class="text-sm font-bold text-gray-700 mr-2">#${standingRank(team)}</span>`;
             left.innerHTML = `${rankBadge}${imgHtml}<div class="min-w-0"><div class="font-semibold text-sm text-gray-900 truncate">${abbrev}</div><div class="text-[10px] text-gray-500 truncate">${team.division}</div></div>`;
             const right = document.createElement('div');
             right.className = 'text-[11px] ml-auto text-right space-y-0';
@@ -244,7 +269,7 @@ function renderStandings() {
             e.preventDefault();
             const idx = Number(btn.getAttribute('data-team-index')) || 0;
             const team = filteredTeams[idx];
-            showDetailsModal(team, idx+1);
+            showDetailsModal(team, standingRank(team));
         });
     });
 
@@ -285,7 +310,7 @@ function showDetailsModal(team, rank) {
         <div class="flex items-center justify-between">
             <div>
                 <div class="text-lg font-bold">#${rank} ${team.abbrev ? team.abbrev.toUpperCase() : team.name}</div>
-                <div class="text-sm text-gray-500">${team.name} — ${team.division}</div>
+                <div class="text-sm text-gray-500">${team.name} · ${team.division}</div>
             </div>
         </div>
         <div class="mt-3 grid grid-cols-2 gap-2 text-sm text-gray-700">
@@ -368,4 +393,10 @@ function calcPointsPct(team) {
     const gp = (team.record && (team.record.wins + team.record.losses + team.record.overtimeLosses)) || 0;
     const max = gp * 2;
     return max > 0 && team.record ? (team.record.points / max) : 0;
+}
+
+function standingRank(team) {
+    if (currentFilter === 'league') return team.rank || team._originalIndex;
+    if (['Eastern','Western'].includes(currentFilter)) return team.conferenceRank || team._originalIndex;
+    return team.divisionRank || team._originalIndex;
 }

@@ -3,49 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scores & Schedule - NHL Fan Hub</title>
-    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <title>Scores & Schedule - Barnwide</title>
+    <link rel="icon" href="/static/favicon.ico?v=barnwide" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png?v=barnwide">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png?v=barnwide">
     <link rel="stylesheet" href="/static/style.css">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-    tailwind.config = {
-        theme: {
-            extend: {
-                colors: {
-                    primary: '#0d47a1',
-                    secondary: '#1565c0',
-                    accent: '#ffb300'
-                }
-            }
-        }
-    }
-    </script>
+    <link rel="stylesheet" href="/static/utilities.css">
+<link rel="stylesheet" href="/static/design.css">
+<script src="/static/site.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+<a class="skip-link" href="#mainContent">Skip to content</a>
+<nav class="site-nav" aria-label="Main navigation"><a class="brand" href="/"><img class="brand-arena" src="/static/barnwide-mark.png" width="64" height="44" alt=""><span>Barnwide</span></a><div class="nav-links"><a href="/">Teams</a><a href="/scores">Scores</a><a href="/standings">Standings</a></div></nav>
+<div id="dataStatus" class="data-status hidden" role="status"></div>
+
+    <div id="mainContent" class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <header class="bg-gradient-to-r from-primary to-secondary text-white rounded-2xl p-6 shadow-lg mb-6 relative overflow-hidden">
             <div class="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.2),transparent_60%)]"></div>
             <div class="relative z-10 flex items-center justify-between">
-                <h1 class="text-3xl font-extrabold tracking-tight flex items-center gap-3"><span>🏒</span> Scores & Schedule</h1>
-                <div class="flex gap-2">
-                    <a href="/standings" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">Standings</a>
-                    <a href="/" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">Home</a>
-                </div>
+                <h1 class="text-3xl font-extrabold tracking-tight flex items-center gap-3"><span></span> Scores & Schedule</h1>
+
             </div>
         </header>
 
-        <!-- Date Navigation -->
-        <div class="bg-white rounded-2xl shadow-md p-4 mb-6">
-            <div class="flex items-center justify-between gap-4">
-                <button id="prevDay" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg font-semibold transition">← Previous Day</button>
-                <div class="text-center">
-                    <div id="currentDate" class="text-xl font-bold text-gray-800"></div>
-                    <button id="todayBtn" class="text-sm text-primary hover:text-secondary font-semibold mt-1">Jump to Today</button>
-                </div>
-                <button id="nextDay" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg font-semibold transition">Next Day →</button>
-            </div>
+        <div class="date-navigation">
+            <button id="prevDay">← Previous day</button>
+            <div><div id="currentDate"></div><button id="todayBtn">Today</button></div>
+            <button id="nextDay">Next day →</button>
         </div>
-
         <!-- Loading State -->
         <div id="loading" class="text-center py-12 text-gray-500 text-lg">Loading games...</div>
 
@@ -54,9 +39,9 @@
 
         <!-- Games Grid -->
         <div id="gamesContainer" class="hidden">
-            <div id="gamesGrid" class="space-y-4"></div>
+            <div id="gamesGrid" class="score-list"></div>
             <div id="noGames" class="hidden text-center py-12 text-gray-500">
-                <div class="text-6xl mb-4">📅</div>
+                <div class="text-6xl mb-4"></div>
                 <div class="text-xl font-semibold">No games scheduled for this date</div>
             </div>
         </div>

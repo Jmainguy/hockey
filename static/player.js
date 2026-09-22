@@ -25,38 +25,8 @@ const teamColorMap = {
 };
 
 function applyTeamTheme(abbrev) {
-    const hero = document.getElementById('playerHero');
-    if (!hero) return;
-    const actionShot = hero.dataset.actionShot || '';
     const overlay = document.getElementById('heroOverlay');
-    
-    const map = abbrev ? teamColorMap[abbrev.toUpperCase()] : null;
-    const gradient = map ? `linear-gradient(135deg, ${map.primary}55, ${map.accent}55)` : 'linear-gradient(135deg,#ffffff,#f5f8fa)';
-    const imageLayer = actionShot ? `, url(${actionShot})` : '';
-    hero.style.background = gradient + imageLayer;
-    hero.style.backgroundSize = 'cover';
-    // Default to top for desktop, center for mobile (override with media query)
-    hero.style.backgroundPosition = 'top';
-    if (map) hero.style.borderColor = map.primary + '40';
-
-    // Responsive override: center on mobile
-    const styleId = 'player-hero-bgpos';
-    let styleTag = document.getElementById(styleId);
-    if (!styleTag) {
-        styleTag = document.createElement('style');
-        styleTag.id = styleId;
-        document.head.appendChild(styleTag);
-    }
-    styleTag.textContent = `
-        @media (max-width: 640px) {
-            #playerHero { background-position: center !important; }
-        }
-    `;
-
-    // Always show overlay for text visibility (white text on all backgrounds)
-    if (overlay) {
-        overlay.style.opacity = '1';
-    }
+    if (overlay) overlay.style.display = 'none';
 }
 
 function computeDelta(curr, prev) {
@@ -105,7 +75,7 @@ async function loadPlayer() {
     const main = document.getElementById('playerMain');
 
     try {
-        const resp = await fetch(`/api/player/${id}`);
+        const resp = await hockeyFetch(`/api/player/${id}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
 
@@ -183,13 +153,13 @@ async function loadPlayer() {
                 const idOrAbbr = teamObj.abbreviation || teamObj.id || '';
                 if (idOrAbbr) {
                     try {
-                        const resp = await fetch(`/api/team/${idOrAbbr}`);
+                        const resp = await hockeyFetch(`/api/team/${idOrAbbr}`);
                         if (resp.ok) {
                             const td = await resp.json();
                             if (td.teams && td.teams.length > 0) {
                                 const fullTeam = td.teams[0];
                                 try { window.populateSharedHeader(fullTeam, 'Player'); } catch (e) { console.error('populateSharedHeader error', e); }
-                                try { if (fullTeam.name && fullTeam.name.trim()) document.title = fullTeam.name + ' — Player'; } catch (e) {}
+                                try { if (fullTeam.name && fullTeam.name.trim()) document.title = fullTeam.name + ' · Player'; } catch (e) {}
                             } else {
                                 try { window.populateSharedHeader(teamObj, 'Player'); } catch (e) { console.error('populateSharedHeader error', e); }
                             }
@@ -306,6 +276,9 @@ async function loadPlayer() {
             statsDiv.innerHTML = '';
             if (data.featuredStats && data.featuredStats.regularSeason && data.featuredStats.regularSeason.subSeason) {
                 const s = data.featuredStats.regularSeason.subSeason;
+                const seasonLabel = document.getElementById('playerStatsSeason');
+                const season = String(data.featuredStats.season || '');
+                if (seasonLabel && season.length === 8) seasonLabel.textContent = `${season.slice(0,4)}–${season.slice(4)} regular-season statistics`;
                 const list = [];
                 if (s.gamesPlayed !== undefined) list.push({ k: 'GP', v: s.gamesPlayed });
                 const toiVal = resolve(s.timeOnIce) || resolve(s.timeOnIcePerGame) || resolve(s.totalTimeOnIce) || resolve(s.avgTimeOnIce) || resolve(s.timeOnIcePerGameFormatted) || resolve(s.toi);
@@ -725,7 +698,7 @@ async function loadPlayer() {
                         seasons.forEach(sea => {
                             const seasonStr = formatSeasonId(sea.seasonId || sea.seasonID || sea.seasonid || sea.SeasonID);
                             const row = document.createElement('div'); row.className='award-row';
-                            row.innerHTML = `<div class='award-meta'><div class='award-name'>${seasonStr ? seasonStr+' — ' : ''}${trophyName}</div></div>`;
+                            row.innerHTML = `<div class='award-meta'><div class='award-name'>${seasonStr ? seasonStr+' · ' : ''}${trophyName}</div></div>`;
                             awardsRoot.appendChild(row);
                         });
                     }
@@ -760,7 +733,7 @@ async function loadPlayer() {
                 if (item.assists !== undefined) vals.push(`A ${item.assists}`);
                 if (item.points !== undefined) vals.push(`PTS ${item.points}`);
                 const p = document.createElement('div');
-                p.innerHTML = `<strong>${name}</strong> — ${vals.join(' • ')}`;
+                p.innerHTML = `<strong>${name}</strong> · ${vals.join(' • ')}`;
                 sec.appendChild(p);
             });
             careerDiv.appendChild(sec);
@@ -822,7 +795,7 @@ async function loadPlayerBio(playerId) {
     if (!bioDiv) return;
 
     try {
-        const resp = await fetch(`/api/player-bio/${playerId}`);
+        const resp = await hockeyFetch(`/api/player-bio/${playerId}`);
         if (!resp.ok) {
             bioDiv.innerHTML = '<div class="text-center text-gray-500 py-6">No biography available</div>';
             return;

@@ -3,26 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Player Details - NHL Fan Hub</title>
-    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <title>Player Details - Barnwide</title>
+    <link rel="icon" href="/static/favicon.ico?v=barnwide" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png?v=barnwide">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png?v=barnwide">
     <link rel="stylesheet" href="/static/style.css">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-    tailwind.config = {
-        theme: {
-            extend: {
-                colors: {
-                    primary: '#0d47a1',
-                    secondary: '#1565c0',
-                    accent: '#ffb300'
-                }
-            }
-        }
-    }
-    </script>
+    <link rel="stylesheet" href="/static/utilities.css">
+<link rel="stylesheet" href="/static/design.css">
+<script src="/static/site.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+<a class="skip-link" href="#mainContent">Skip to content</a>
+<nav class="site-nav" aria-label="Main navigation"><a class="brand" href="/"><img class="brand-arena" src="/static/barnwide-mark.png" width="64" height="44" alt=""><span>Barnwide</span></a><div class="nav-links"><a href="/">Teams</a><a href="/scores">Scores</a><a href="/standings">Standings</a></div></nav>
+<div id="dataStatus" class="data-status hidden" role="status"></div>
+
+    <div id="mainContent" class="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         <div id="teamHeaderContainer"></div>
 
         <!-- Sticky navigation -->
@@ -45,7 +40,7 @@
 
             <div id="playerMain" class="hidden">
                 <!-- Hero -->
-                <section id="playerHero" class="player-hero bg-white rounded-2xl shadow-md overflow-hidden mb-6 relative" aria-labelledby="playerNameHeading">
+                <section id="playerHero" class="player-hero bg-white rounded-2xl shadow-md overflow-hidden mb-6 relative" aria-labelledby="playerName">
                     <!-- Dark overlay for readability when action shot is present -->
                     <div class="absolute inset-0 bg-gradient-to-br from-black/40 via-black/20 to-transparent pointer-events-none opacity-0 transition-opacity duration-300" id="heroOverlay"></div>
                     <div class="relative z-10 p-6 md:p-8">
@@ -71,7 +66,7 @@
                         <section id="tab-overview" data-tab="overview" class="tab-panel" aria-labelledby="tabBtnOverview">
                             <h3 id="tabBtnOverview" class="sr-only">Overview</h3>
                             <div class="mb-6">
-                                <h3 class="text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">Current Season Key Stats <span class="h-1 w-12 bg-accent rounded-full"></span></h3>
+                                <h3 class="text-xl font-bold text-gray-800 mb-3 flex items-center gap-2"><span id="playerStatsSeason">Regular-season statistics</span> <span class="h-1 w-12 bg-accent rounded-full"></span></h3>
                                 <div id="playerStats"></div>
                             </div>
                             <div>
@@ -95,7 +90,7 @@
                         <section id="tab-awards" data-tab="awards" class="tab-panel hidden" aria-labelledby="tabBtnAwards">
                             <h3 id="tabBtnAwards" class="sr-only">Awards</h3>
                             <div id="playerBadgesSection" class="hidden">
-                                <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">Badges & Awards <span class="h-1 w-12 bg-accent rounded-full"></span></h3>
+                                <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">Awards <span class="h-1 w-12 bg-accent rounded-full"></span></h3>
                                 <div id="playerAwards"></div>
                             </div>
                         </section>

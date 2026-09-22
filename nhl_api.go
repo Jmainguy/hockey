@@ -1,777 +1,39 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
+
 	"strings"
 	"time"
-
-	"github.com/redis/go-redis/v9"
-	"golang.org/x/time/rate"
 )
 
-var (
-	redisClient *redis.Client
-	redisCtx    = context.Background()
-)
-
-// MaxInlinePlayerFetches bounds how many player landing fetches
-// we will perform synchronously while building the prospects `players`
-// array. This prevents a single on-demand prospects request from
-// triggering many upstream calls (which previously caused 429s).
-const MaxInlinePlayerFetches = 5
-
-func init() {
-	if redisAddr := os.Getenv("REDIS_ADDR"); redisAddr != "" {
-		redisClient = redis.NewClient(&redis.Options{
-			Addr: redisAddr,
-		})
-		log.Printf("Redis client initialized with address: %s", redisAddr)
-
-		// Start the queue-based cache warmer in the background
-		startQueueWarmer()
-	} else {
-		log.Println("REDIS_ADDR not set, Redis caching disabled")
-	}
-	// Initialize API rate limiter; default 10 req/s but can be raised for testing
-	rl := 10
-	if v := os.Getenv("API_RATE_LIMIT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			rl = n
-		}
-	}
-	apiRateLimiter = rate.NewLimiter(rate.Limit(rl), 1)
-}
-
-// getCachedRaw reads a value from Redis and returns raw bytes
+// Legacy processed caches use a versioned namespace and finite lifetimes.
+// Upstream request coalescing and stale fallback live in upstream.go.
 func getCachedRaw(key string) ([]byte, error) {
-	if redisClient == nil {
-		return nil, fmt.Errorf("redis not available")
+	entry, ok := upstream.cached("processed:" + key)
+	if !ok || time.Now().After(entry.FreshUntil) {
+		return nil, fmt.Errorf("cache miss")
 	}
-	val, err := redisClient.Get(redisCtx, key).Result()
-	if err != nil {
-		return nil, err
-	}
-	return []byte(val), nil
+	return entry.Data, nil
 }
-
-// setCachedRaw writes raw bytes to Redis with a TTL
 func setCachedRaw(key string, data []byte, ttl time.Duration) error {
-	if redisClient == nil {
-		return fmt.Errorf("redis not available")
+	if ttl <= 0 || ttl > time.Hour {
+		ttl = time.Hour
 	}
-	return redisClient.Set(redisCtx, key, string(data), ttl).Err()
-}
-func enqueueWarmKey(key string) error {
-	if redisClient == nil {
-		return fmt.Errorf("redis not available")
-	}
-	return redisClient.LPush(redisCtx, "warm:queue", key).Err()
-}
-
-// scheduleWarmRetry schedules a warm retry in the future using a Redis ZSET.
-func scheduleWarmRetry(key string, delaySeconds int64) error {
-	if redisClient == nil {
-		return fmt.Errorf("redis not available")
-	}
-	score := float64(time.Now().Unix() + delaySeconds)
-	return redisClient.ZAdd(redisCtx, "warm:scheduled", redis.Z{Score: score, Member: key}).Err()
-}
-
-// fetchBytesForWarmKey returns the raw bytes for a queued key by mapping
-// known key prefixes to the appropriate upstream fetch.
-func fetchBytesForWarmKey(key string) ([]byte, error) {
-	switch {
-	case strings.HasPrefix(key, "standings:"):
-		// Use GetAllTeams so warmer and UI share the same parsing/caching logic
-		// for standings-derived team lists.
-		teams, err := GetAllTeams()
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(teams)
-	case strings.HasPrefix(key, "schedule:"):
-		date := strings.TrimPrefix(key, "schedule:")
-		return GetSchedule(date)
-	case strings.HasPrefix(key, "roster:"):
-		// roster:ABBR-SEASON
-		// Use the same logic as the UI: call GetRoster to produce the canonical
-		// `RosterResponse` shape, marshal it, and return bytes for caching. This
-		// ensures the warmer and on-demand handlers produce and cache identical
-		// payloads.
-		rest := strings.TrimPrefix(key, "roster:")
-		parts := strings.SplitN(rest, "-", 2)
-		if len(parts) < 1 {
-			return nil, fmt.Errorf("invalid roster key: %s", key)
-		}
-		team := parts[0]
-		// Delegate to GetRoster (it uses current season), which returns the
-		// processed `RosterResponse` used by the UI.
-		rr, err := GetRoster(team)
-		if err != nil {
-			return nil, err
-		}
-		b, err := json.Marshal(rr)
-		if err != nil {
-			return nil, err
-		}
-		return b, nil
-	case strings.HasPrefix(key, "teamdetails:"):
-		abbr := strings.TrimPrefix(key, "teamdetails:")
-		td, err := GetTeamDetails(abbr)
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(td)
-	case strings.HasPrefix(key, "prospects:"):
-		// Delegate to GetProspects so the warmer and on-demand UI use identical
-		// logic and cache shapes.
-		team := strings.TrimPrefix(key, "prospects:")
-		data, err := GetProspects(team)
-		if err != nil {
-			return nil, err
-		}
-		return data, nil
-	case strings.HasPrefix(key, "player:"):
-		id := strings.TrimPrefix(key, "player:")
-		data, err := GetPlayer(id)
-		if err != nil {
-			return nil, err
-		}
-		return data, nil
-	case strings.HasPrefix(key, "team-news:"):
-		// team-news:<id>
-		id := strings.TrimPrefix(key, "team-news:")
-		apiURL := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-us/stories?tags.slug=teamid-%s&$limit=10", id)
-		resp, err := rateLimitedGet(apiURL)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if cerr := resp.Body.Close(); cerr != nil {
-				log.Printf("Error closing response body: %v", cerr)
-			}
-		}()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-		}
-		return io.ReadAll(resp.Body)
-	default:
-		return nil, fmt.Errorf("unknown warm key: %s", key)
-	}
-}
-
-// startQueueWarmer runs a single leader worker that processes warm:queue.
-// It uses BRPop to receive keys and respects `apiRateLimiter` and our inflight locks.
-func startQueueWarmer() {
-	if redisClient == nil {
-		log.Println("Redis not available, skipping queue warmer")
-		return
-	}
-
-	go func() {
-		// Try to acquire a long-running lock for the warmer
-		lockKey := "cache-warmer-lock"
-		_, err := redisClient.SetArgs(redisCtx, lockKey, fmt.Sprintf("%d", time.Now().Unix()), redis.SetArgs{
-			Mode: "NX",
-			TTL:  15 * time.Minute,
-		}).Result()
-		if err == redis.Nil {
-			log.Println("Another instance is already running the queue warmer, skipping")
-			return
-		}
-		if err != nil {
-			log.Printf("Failed to acquire queue warmer lock: %v", err)
-			return
-		}
-		defer redisClient.Del(redisCtx, lockKey)
-
-		// Renewal goroutine
-		stopRenew := make(chan struct{})
-		go func() {
-			ticker := time.NewTicker(2 * time.Minute)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					if err := redisClient.Expire(redisCtx, lockKey, 15*time.Minute).Err(); err != nil {
-						log.Printf("Failed to renew queue warmer lock: %v", err)
-						return
-					}
-				case <-stopRenew:
-					return
-				}
-			}
-		}()
-		defer close(stopRenew)
-
-		log.Println("Queue cache warmer started")
-		// Warmers can process multiple keys concurrently within the same
-		// process to avoid a single slow fetch blocking the entire queue.
-		// Concurrency is bounded by WARMER_CONCURRENCY (env) to avoid bursts.
-		warmerConcurrency := 8
-		if v := os.Getenv("WARMER_CONCURRENCY"); v != "" {
-			if n, err := strconv.Atoi(v); err == nil && n > 0 {
-				warmerConcurrency = n
-			}
-		}
-		warmerWorkers := make(chan struct{}, warmerConcurrency)
-		// If queue is empty at startup, seed it with critical keys
-		if cnt, err := redisClient.LLen(redisCtx, "warm:queue").Result(); err == nil && cnt == 0 {
-			log.Println("Warm queue empty at startup — seeding critical keys")
-			go func() {
-				if err := seedWarmQueue(); err != nil {
-					log.Printf("Failed to seed warm queue: %v", err)
-				}
-			}()
-		}
-
-		// (startup seeding invoked above)
-
-		for {
-			// Move due scheduled items from ZSET to queue
-			now := time.Now().Unix()
-			due, err := redisClient.ZRangeArgs(redisCtx, redis.ZRangeArgs{
-				Key:     "warm:scheduled",
-				Start:   "-inf",
-				Stop:    fmt.Sprintf("%d", now),
-				ByScore: true,
-			}).Result()
-			if err == nil && len(due) > 0 {
-				pipe := redisClient.TxPipeline()
-				// remove these members from scheduled set
-				pipe.ZRem(redisCtx, "warm:scheduled", interfaceSlice(due)...)
-				// push each into warm queue
-				for _, m := range due {
-					pipe.LPush(redisCtx, "warm:queue", m)
-				}
-				if _, err := pipe.Exec(redisCtx); err != nil {
-					log.Printf("Failed to move scheduled warm keys to queue: %v", err)
-				} else {
-					log.Printf("Moved %d scheduled warm keys to queue", len(due))
-				}
-			}
-
-			// BRPop blocks until an element is available or timeout
-			res, err := redisClient.BRPop(redisCtx, 5*time.Second, "warm:queue").Result()
-			if err != nil {
-				if err == redis.Nil {
-					// timeout, loop and continue
-					continue
-				}
-				log.Printf("Queue warmer BRPop error: %v", err)
-				time.Sleep(5 * time.Second)
-				continue
-			}
-
-			if len(res) < 2 {
-				continue
-			}
-			key := res[1]
-			// Acquire worker slot (blocks when at concurrency limit)
-			warmerWorkers <- struct{}{}
-			go func(k string) {
-				defer func() { <-warmerWorkers }()
-				log.Printf("Dequeued warm key: %s", k)
-
-				// If already cached, skip
-				if _, err := getCachedRaw(k); err == nil {
-					log.Printf("Warm skip: %s already cached", k)
-					return
-				}
-
-				log.Printf("Attempting to warm key: %s", k)
-				// Fetch bytes for the key using fetchBytesForWarmKey via getCachedOrFetchWithBackoff
-				_, err := getCachedOrFetchWithBackoff(k, func() ([]byte, error) {
-					return fetchBytesForWarmKey(k)
-				}, determineTTL(strings.SplitN(k, ":", 2)[0]))
-
-				if err != nil {
-					log.Printf("Failed to warm %s: %v", k, err)
-					// On 429, schedule a retry in a short delay
-					if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
-						if serr := scheduleWarmRetry(k, 30); serr != nil {
-							log.Printf("Failed to schedule warm retry for %s: %v", k, serr)
-						} else {
-							log.Printf("Scheduled warm retry (30s) for %s due to 429", k)
-						}
-					}
-					// For other errors, don't aggressively re-enqueue; let on-demand requests repopulate
-					return
-				}
-
-				// Confirm whether the data was actually cached (validation may have prevented caching)
-				attemptsKey := fmt.Sprintf("warm:attempts:%s", k)
-				if _, cacheErr := getCachedRaw(k); cacheErr == nil {
-					// Successful cache: clear any attempt counters
-					if redisClient != nil {
-						_ = redisClient.Del(redisCtx, attemptsKey).Err()
-					}
-					log.Printf("Successfully warmed and cached key: %s", k)
-				} else {
-					log.Printf("Warm fetched but not cached (validation) for key: %s", k)
-					// Schedule a retry with exponential backoff using Redis attempt counter
-					if redisClient != nil {
-						attempts, err := redisClient.Incr(redisCtx, attemptsKey).Result()
-						if err != nil {
-							log.Printf("Failed to increment warm attempts for %s: %v", k, err)
-							return
-						}
-						// Keep attempts key for 24h
-						_ = redisClient.Expire(redisCtx, attemptsKey, 24*time.Hour).Err()
-
-						// delay = min(3600s, 30s * 2^(attempts-1))
-						delaySeconds := int64(math.Min(3600, math.Pow(2, float64(attempts-1))*30))
-						if serr := scheduleWarmRetry(k, delaySeconds); serr != nil {
-							log.Printf("Failed to schedule warm retry for %s: %v", k, serr)
-						} else {
-							log.Printf("Scheduled warm retry for %s in %ds (attempt %d)", k, delaySeconds, attempts)
-						}
-					}
-				}
-			}(key)
-		}
-	}()
-}
-
-// seedWarmQueue enqueues a conservative set of keys at startup: standings, schedule,
-// teamdetails and rosters for all known NHL teams. It paces enqueues to avoid bursts.
-func seedWarmQueue() error {
-	if redisClient == nil {
-		return fmt.Errorf("redis not available")
-	}
-
-	// Standings & schedule for today
-	date := time.Now().Format("2006-01-02")
-	if err := enqueueWarmKey(fmt.Sprintf("standings:%s", date)); err != nil {
-		return err
-	}
-	if err := enqueueWarmKey(fmt.Sprintf("schedule:%s", date)); err != nil {
-		return err
-	}
-
-	// Get all teams and enqueue their teamdetails and roster keys, paced
-	teamsResp, err := GetAllTeams()
-	if err != nil {
-		log.Printf("seedWarmQueue: failed to get teams: %v", err)
-		return err
-	}
-
-	season := currentSeasonID()
-	for _, t := range teamsResp.Teams {
-		abbr := strings.ToUpper(t.Abbrev)
-		tdKey := fmt.Sprintf("teamdetails:%s", abbr)
-		rosterKey := fmt.Sprintf("roster:%s-%s", abbr, season)
-		prospectsKey := fmt.Sprintf("prospects:%s", abbr)
-		if err := enqueueWarmKey(tdKey); err != nil {
-			log.Printf("seedWarmQueue: failed enqueue %s: %v", tdKey, err)
-		}
-		// small pause to avoid hammering upstream when warmer starts
-		time.Sleep(250 * time.Millisecond)
-		if err := enqueueWarmKey(rosterKey); err != nil {
-			log.Printf("seedWarmQueue: failed enqueue %s: %v", rosterKey, err)
-		}
-		// Also enqueue prospects for this team so warmer fetches prospect lists
-		if err := enqueueWarmKey(prospectsKey); err != nil {
-			log.Printf("seedWarmQueue: failed enqueue %s: %v", prospectsKey, err)
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	log.Println("seedWarmQueue: enqueued initial warm keys")
+	upstream.save("processed:"+key, data, ttl)
 	return nil
 }
 
-// getCachedOrFetchWithBackoff checks cache first, then fetches with backoff if needed
-// It also implements cross-process request deduplication using a short Redis "inflight" lock.
-func getCachedOrFetchWithBackoff(cacheKey string, fetchFunc func() ([]byte, error), ttl time.Duration) ([]byte, error) {
-	// Check cache first
-	if cachedData, err := getCachedRaw(cacheKey); err == nil {
-		log.Printf("Cache hit for %s", cacheKey)
-		return cachedData, nil
-	}
-
-	// Cache miss - fetch with backoff
-	log.Printf("Cache miss for %s, fetching with backoff", cacheKey)
-	backoffDelays := []time.Duration{30 * time.Second, 1 * time.Minute, 2 * time.Minute, 5 * time.Minute}
-
-	// Request deduplication across processes: try to acquire an inflight lock in Redis.
-	// If we can't acquire the lock, wait/poll for another worker to populate the cache.
-	var holdLock bool
-	lockKey := fmt.Sprintf("inflight:%s", cacheKey)
-	lockTTL := 2 * time.Minute
-	pollInterval := 500 * time.Millisecond
-	waitTimeout := 30 * time.Second
-	if redisClient != nil {
-		// Try to acquire lock immediately
-		if _, err := redisClient.SetArgs(redisCtx, lockKey, "1", redis.SetArgs{Mode: "NX", TTL: lockTTL}).Result(); err == nil {
-			holdLock = true
-			log.Printf("Acquired inflight lock for %s", cacheKey)
-		} else {
-			// Another process is fetching this key: wait for it to populate cache
-			deadline := time.Now().Add(waitTimeout)
-			for time.Now().Before(deadline) {
-				if cachedData, err := getCachedRaw(cacheKey); err == nil {
-					log.Printf("Observed cache populated for %s by another worker", cacheKey)
-					return cachedData, nil
-				}
-				time.Sleep(pollInterval)
-			}
-			// After waiting, try to take over the lock in case the other worker died
-			if _, err := redisClient.SetArgs(redisCtx, lockKey, "1", redis.SetArgs{Mode: "NX", TTL: lockTTL}).Result(); err == nil {
-				holdLock = true
-				log.Printf("Took over inflight lock for %s after waiting", cacheKey)
-			} else {
-				log.Printf("Proceeding to fetch %s without lock after timeout", cacheKey)
-			}
-		}
-	}
-
-	for attempt, delay := range append([]time.Duration{0}, backoffDelays...) {
-		if delay > 0 {
-			log.Printf("Backing off for %v before retrying %s", delay, cacheKey)
-			time.Sleep(delay)
-		}
-
-		data, err := fetchFunc()
-		if err != nil {
-			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
-				// record a short-lived marker so callers (warmer) can report that a 429
-				// occurred recently for this cacheKey and attribute validation failures.
-				if redisClient != nil {
-					_ = redisClient.Set(redisCtx, fmt.Sprintf("fetch429:%s", cacheKey), "1", 10*time.Minute).Err()
-				}
-				if attempt < len(backoffDelays) {
-					log.Printf("429 error for %s, attempt %d, will retry", cacheKey, attempt+1)
-					continue
-				} else {
-					log.Printf("429 error for %s, max retries exceeded", cacheKey)
-					// Release lock if held
-					if holdLock && redisClient != nil {
-						_ = redisClient.Del(redisCtx, lockKey).Err()
-					}
-					return nil, err
-				}
-			} else {
-				log.Printf("Non-429 error for %s: %v", cacheKey, err)
-				if holdLock && redisClient != nil {
-					_ = redisClient.Del(redisCtx, lockKey).Err()
-				}
-				return nil, err
-			}
-		}
-
-		// Success! Cache the data
-		// Validate before caching to avoid storing empty/stale payloads
-		if valid, reason := isValidForCache(cacheKey, data); valid {
-			if err := setCachedRaw(cacheKey, data, ttl); err != nil {
-				log.Printf("Failed to cache %s: %v", cacheKey, err)
-			} else {
-				log.Printf("Successfully cached %s", cacheKey)
-			}
-		} else {
-			// If validation failed, annotate reason with recent 429 if present, and log
-			if redisClient != nil {
-				if v, _ := redisClient.Get(redisCtx, fmt.Sprintf("fetch429:%s", cacheKey)).Result(); v == "1" {
-					reason = fmt.Sprintf("%s (upstream recently returned 429)", reason)
-				}
-			}
-			log.Printf("Validation failed for %s; not caching: %s", cacheKey, reason)
-		}
-
-		// Clear the 429 marker now that we've completed a successful fetch attempt (whether cached or not)
-		if redisClient != nil {
-			_ = redisClient.Del(redisCtx, fmt.Sprintf("fetch429:%s", cacheKey)).Err()
-		}
-		// Release inflight lock if we hold it
-		if holdLock && redisClient != nil {
-			if err := redisClient.Del(redisCtx, lockKey).Err(); err != nil {
-				log.Printf("Failed to release inflight lock %s: %v", lockKey, err)
-			}
-		}
-		return data, nil
-	}
-
-	// If we exit the retry loop without success, ensure lock is released
-	if holdLock && redisClient != nil {
-		if err := redisClient.Del(redisCtx, lockKey).Err(); err != nil {
-			log.Printf("Failed to release inflight lock %s after retries: %v", lockKey, err)
-		}
-	}
-	return nil, fmt.Errorf("failed to fetch %s after all retries", cacheKey)
-}
-
-// isValidForCache performs basic validation of fetched payloads before caching.
-// It recognizes known cache key prefixes and ensures critical fields are present.
-func isValidForCache(cacheKey string, data []byte) (bool, string) {
-	// Quick sanity: empty data is invalid
-	if len(data) == 0 {
-		return false, "empty payload"
-	}
-
-	// Rosters: accept either legacy `players` array or the NHL endpoint shape
-	// with `forwards`/`defensemen`/`goalies` arrays. Ensure at least one
-	// player is present.
-	if strings.HasPrefix(cacheKey, "roster:") {
-		// Try the simple `players` shape first
-		var rPlayers struct {
-			Players []interface{} `json:"players"`
-		}
-		if err := json.Unmarshal(data, &rPlayers); err == nil {
-			if len(rPlayers.Players) > 0 {
-				return true, ""
-			}
-			// fallthrough to try NHL roster shape
-		}
-
-		// Try the NHL roster endpoint shape
-		var r struct {
-			Forwards   []interface{} `json:"forwards"`
-			Defensemen []interface{} `json:"defensemen"`
-			Goalies    []interface{} `json:"goalies"`
-		}
-		if err := json.Unmarshal(data, &r); err != nil {
-			reason := fmt.Sprintf("unmarshal error: %v", err)
-			log.Printf("roster validation unmarshal error for %s: %v", cacheKey, err)
-			return false, reason
-		}
-		if len(r.Forwards)+len(r.Defensemen)+len(r.Goalies) == 0 {
-			return false, "no players present in roster"
-		}
-		return true, ""
-	}
-
-	// Team details must contain a non-empty teams array with a non-empty name
-	if strings.HasPrefix(cacheKey, "teamdetails:") {
-		var t struct {
-			Teams []struct {
-				Name string `json:"name"`
-			} `json:"teams"`
-		}
-		if err := json.Unmarshal(data, &t); err != nil {
-			reason := fmt.Sprintf("unmarshal error: %v", err)
-			log.Printf("teamdetails validation unmarshal error for %s: %v", cacheKey, err)
-			return false, reason
-		}
-		if len(t.Teams) == 0 {
-			return false, "teams array empty"
-		}
-		if strings.TrimSpace(t.Teams[0].Name) == "" {
-			return false, "team name empty"
-		}
-		return true, ""
-	}
-
-	// Per-series playoff schedule (games in a series)
-	if strings.HasPrefix(cacheKey, "psched:") {
-		var s struct {
-			SeriesLetter string            `json:"seriesLetter"`
-			Games        []json.RawMessage `json:"games"`
-		}
-		if err := json.Unmarshal(data, &s); err != nil {
-			reason := fmt.Sprintf("unmarshal error: %v", err)
-			log.Printf("psched validation unmarshal error for %s: %v", cacheKey, err)
-			return false, reason
-		}
-		if s.SeriesLetter == "" {
-			return false, "seriesLetter empty"
-		}
-		return true, ""
-	}
-
-	// Playoff bracket JSON must include a `series` array (may be empty in the off-season).
-	if strings.HasPrefix(cacheKey, "playoff-bracket:") {
-		var b struct {
-			Series []json.RawMessage `json:"series"`
-		}
-		if err := json.Unmarshal(data, &b); err != nil {
-			reason := fmt.Sprintf("unmarshal error: %v", err)
-			log.Printf("playoff-bracket validation unmarshal error for %s: %v", cacheKey, err)
-			return false, reason
-		}
-		return true, ""
-	}
-
-	// Standings should contain a `standings` array
-	if strings.HasPrefix(cacheKey, "standings:") {
-		var s struct {
-			Standings []interface{} `json:"standings"`
-		}
-		if err := json.Unmarshal(data, &s); err != nil {
-			// fallback: older cached format may have `teams`
-			var old struct {
-				Teams []interface{} `json:"teams"`
-			}
-			if err2 := json.Unmarshal(data, &old); err2 != nil {
-				reason := fmt.Sprintf("unmarshal errors: %v / %v", err, err2)
-				log.Printf("standings validation unmarshal errors for %s: %v / %v", cacheKey, err, err2)
-				return false, reason
-			}
-			if len(old.Teams) == 0 {
-				return false, "teams array empty (old format)"
-			}
-			return true, ""
-		}
-		if len(s.Standings) == 0 {
-			return false, "standings array empty"
-		}
-		return true, ""
-	}
-
-	// Player landing JSON should include at least an id or a headshot/featuredStats
-	if strings.HasPrefix(cacheKey, "player:") {
-		var p struct {
-			PlayerID      int    `json:"playerId"`
-			Headshot      string `json:"headshot"`
-			FeaturedStats struct {
-				RegularSeason struct {
-					SubSeason struct {
-						Games int `json:"gamesPlayed"`
-					} `json:"subSeason"`
-				} `json:"regularSeason"`
-			} `json:"featuredStats"`
-		}
-		if err := json.Unmarshal(data, &p); err != nil {
-			reason := fmt.Sprintf("unmarshal error: %v", err)
-			log.Printf("player validation unmarshal error for %s: %v", cacheKey, err)
-			return false, reason
-		}
-		if p.PlayerID > 0 || p.Headshot != "" || p.FeaturedStats.RegularSeason.SubSeason.Games > 0 {
-			return true, ""
-		}
-		return false, "missing id/headshot/featuredStats"
-	}
-
-	// Prospects must have at least one prospect in forwards/defensemen/goalies
-	if strings.HasPrefix(cacheKey, "prospects:") {
-		var pr struct {
-			Forwards   []interface{} `json:"forwards"`
-			Defensemen []interface{} `json:"defensemen"`
-			Goalies    []interface{} `json:"goalies"`
-		}
-		if err := json.Unmarshal(data, &pr); err != nil {
-			reason := fmt.Sprintf("unmarshal error: %v", err)
-			log.Printf("prospects validation unmarshal error for %s: %v", cacheKey, err)
-			return false, reason
-		}
-		if len(pr.Forwards)+len(pr.Defensemen)+len(pr.Goalies) == 0 {
-			return false, "no prospects present"
-		}
-		return true, ""
-	}
-
-	// Team news should have a `stories` array
-	if strings.HasPrefix(cacheKey, "team-news:") {
-		var n struct {
-			Stories []interface{} `json:"stories"`
-		}
-		if err := json.Unmarshal(data, &n); err != nil {
-			reason := fmt.Sprintf("unmarshal error: %v", err)
-			log.Printf("team-news validation unmarshal error for %s: %v", cacheKey, err)
-			return false, reason
-		}
-		if len(n.Stories) == 0 {
-			return false, "no stories present"
-		}
-		return true, ""
-	}
-
-	// Default: allow caching
-	return true, ""
-}
-
-// determineTTL returns an appropriate TTL for a resource type based on current game state.
-func determineTTL(resource string) time.Duration {
-	live, err := isAnyGameLive()
-	if err != nil {
-		// If we can't determine game state, fall back to conservative defaults
-		live = false
-	}
-
-	switch resource {
-	case "playoff-bracket":
-		if live {
-			return 2 * time.Minute
-		}
-		return 30 * time.Minute
-	case "psched":
-		if live {
-			return 2 * time.Minute
-		}
-		return 15 * time.Minute
-	case "standings":
-		if live {
-			return 5 * time.Minute
-		}
-		return 6 * time.Hour
-	case "game":
-		if live {
-			return 2 * time.Minute
-		}
-		return 1 * time.Hour
-	case "news", "transactions":
-		return 30 * time.Minute
-	case "roster", "static":
-		// Persistent/static data: no expiration
-		return 0
-	default:
-		return 1 * time.Hour
-	}
-}
-
-// isAnyGameLive checks today's schedule and returns true if any game is in a live/critical state.
-func isAnyGameLive() (bool, error) {
-	date := time.Now().Format("2006-01-02")
-	cacheKey := fmt.Sprintf("schedule:%s", date)
-
-	data, err := getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
-		url := fmt.Sprintf("%s/schedule/%s", BaseURL, date)
-		body, err := fetchURL(url)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if cerr := body.Close(); cerr != nil {
-				log.Printf("Error closing response body: %v", cerr)
-			}
-		}()
-		return io.ReadAll(body)
-	}, 1*time.Minute)
-	if err != nil {
-		return false, err
-	}
-
-	var sched struct {
-		Dates []struct {
-			Games []struct {
-				GameState string `json:"gameState"`
-			} `json:"games"`
-		} `json:"dates"`
-	}
-	if err := json.Unmarshal(data, &sched); err != nil {
-		return false, err
-	}
-
-	for _, d := range sched.Dates {
-		for _, g := range d.Games {
-			// Treat LIVE or CRIT as active game states
-			if g.GameState == "LIVE" || g.GameState == "CRIT" {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
-}
-
 // BaseURL is the upstream NHL API base URL.
-const (
+var (
 	BaseURL = "https://api-web.nhle.com/v1"
 )
 
@@ -928,11 +190,6 @@ func ClockText(landing *GameLanding) string {
 }
 
 var (
-	httpClient = &http.Client{
-		Timeout: 10 * time.Second,
-	}
-	// Global rate limiter: configurable via API_RATE_LIMIT env (requests/sec)
-	apiRateLimiter *rate.Limiter
 	// Map team IDs to official NHL API 3-letter abbreviations
 	teamIDToAbbr = map[int]string{
 		1: "NJD", 2: "NYI", 3: "NYR", 4: "PHI", 5: "PIT",
@@ -1003,56 +260,11 @@ func hasNonEmptyStandingsJSON(data []byte) bool {
 	return len(s.Standings) > 0
 }
 
-// standingLookupOffsets is the order in which we try /standings/{date} for team lists. The API
-// often returns an empty "standings" list during the playoffs, so we walk from today backward;
-// 0-45 covers typical “last two weeks of the regular season” without huge jumps, then we try
-// sparser days for edge cases. One ordered slice (no deduping) keeps behavior predictable.
-func standingLookupOffsets() []int {
-	o := make([]int, 0, 80)
-	for d := 0; d < 46; d++ {
-		o = append(o, d)
-	}
-	for d := 50; d < 100; d += 5 {
-		o = append(o, d)
-	}
-	o = append(o, []int{100, 110, 120, 135, 150, 200}...)
-	return o
-}
-
-// getStandingsPayloadForUI fetches the most recent /standings/{date} that still has row data.
-// During the playoffs the same-day endpoint often returns {"standings":[]}, which breaks
-// the home team grid unless we walk back to the end of the regular season.
+// The NHL's now endpoint carries its own season/date. Never scan historical
+// dates on a visitor request. Empty offseason standings are a valid response.
 func getStandingsPayloadForUI() ([]byte, error) {
-	now := time.Now().UTC()
-	ttl := determineTTL("standings")
-	for _, dayOff := range standingLookupOffsets() {
-		date := now.AddDate(0, 0, -dayOff).Format("2006-01-02")
-		cacheKey := fmt.Sprintf("standings:%s", date)
-		if cached, err := getCachedRaw(cacheKey); err == nil && hasNonEmptyStandingsJSON(cached) {
-			return cached, nil
-		}
-		data, err := getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
-			url := fmt.Sprintf("%s/standings/%s", BaseURL, date)
-			body, err := fetchURL(url)
-			if err != nil {
-				return nil, err
-			}
-			defer func() {
-				if cerr := body.Close(); cerr != nil {
-					log.Printf("Error closing response body: %v", cerr)
-				}
-			}()
-			return io.ReadAll(body)
-		}, ttl)
-		if err != nil {
-			log.Printf("getStandingsPayloadForUI: standings %s: %v", date, err)
-			continue
-		}
-		if hasNonEmptyStandingsJSON(data) {
-			return data, nil
-		}
-	}
-	return nil, fmt.Errorf("no non-empty NHL standings found (tried fallback dates)")
+	entry, err := upstream.get(context.Background(), BaseURL+"/standings/now")
+	return entry.Data, err
 }
 
 // playoffBracketCalendarYear returns the year used in /playoff-bracket/{year}
@@ -1067,61 +279,33 @@ func playoffBracketCalendarYear() int {
 
 // GetPlayoffBracketJSON fetches the league playoff bracket (series, wins, team logos).
 func GetPlayoffBracketJSON() ([]byte, error) {
-	year := playoffBracketCalendarYear()
-	cacheKey := fmt.Sprintf("playoff-bracket:%d", year)
-	return getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
-		url := fmt.Sprintf("%s/playoff-bracket/%d", BaseURL, year)
-		body, err := fetchURL(url)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if cerr := body.Close(); cerr != nil {
-				log.Printf("Error closing response body: %v", cerr)
-			}
-		}()
-		return io.ReadAll(body)
-	}, determineTTL("playoff-bracket"))
+	e, err := upstream.get(context.Background(), fmt.Sprintf("%s/playoff-bracket/%d", BaseURL, playoffBracketCalendarYear()))
+	return e.Data, err
 }
-
-// GetPlayoffSeriesScheduleJSON fetches all games in a playoff series (season = 8 digits e.g. 20252026, seriesLetter = A–H etc.).
 func GetPlayoffSeriesScheduleJSON(seasonID, seriesLetter string) ([]byte, error) {
-	seasonID = strings.TrimSpace(seasonID)
-	seriesLetter = strings.TrimSpace(seriesLetter)
-	if len(seasonID) != 8 {
-		return nil, fmt.Errorf("invalid seasonId (want 8 digits): %q", seasonID)
-	}
-	if seriesLetter == "" {
-		return nil, fmt.Errorf("seriesLetter required")
-	}
-	letter := strings.ToUpper(seriesLetter[:1])
-	cacheKey := fmt.Sprintf("psched:%s:%s", seasonID, letter)
-	return getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
-		url := fmt.Sprintf("%s/schedule/playoff-series/%s/%s", BaseURL, seasonID, letter)
-		body, err := fetchURL(url)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if cerr := body.Close(); cerr != nil {
-				log.Printf("Error closing response body: %v", cerr)
-			}
-		}()
-		return io.ReadAll(body)
-	}, determineTTL("psched"))
+	e, err := upstream.get(context.Background(), fmt.Sprintf("%s/schedule/playoff-series/%s/%s", BaseURL, seasonID, strings.ToUpper(seriesLetter)))
+	return e.Data, err
 }
 
 // GetAllTeams fetches all NHL teams from standings
 func GetAllTeams() (*TeamsResponse, error) {
 	data, err := getStandingsPayloadForUI()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get standings data: %w", err)
+		return catalogResponse(), nil
 	}
 
+	return parseStandings(data)
+}
+
+func parseStandings(data []byte) (*TeamsResponse, error) {
 	// Parse standings response - note different structure from old API
 	var standingsResp struct {
 		Standings []struct {
-			TeamAbbrev struct {
+			Rank           int     `json:"leagueSequence"`
+			ConferenceRank int     `json:"conferenceSequence"`
+			DivisionRank   int     `json:"divisionSequence"`
+			PointPctg      float64 `json:"pointPctg"`
+			TeamAbbrev     struct {
 				Default string `json:"default"`
 			} `json:"teamAbbrev"`
 			TeamName struct {
@@ -1178,6 +362,7 @@ func GetAllTeams() (*TeamsResponse, error) {
 			streak = standing.RecordSummary.Streak
 		}
 		teams = append(teams, Team{
+			Rank: standing.Rank, ConferenceRank: standing.ConferenceRank, DivisionRank: standing.DivisionRank, PointPctg: standing.PointPctg,
 			ID:         teamID,
 			Name:       standing.TeamName.Default,
 			Abbrev:     abbrev,
@@ -1205,271 +390,53 @@ func GetAllTeams() (*TeamsResponse, error) {
 		})
 	}
 
-	response := &TeamsResponse{Teams: teams}
+	if len(teams) == 0 {
+		return catalogResponse(), nil
+	}
+	var meta struct {
+		Standings []struct {
+			Date     string `json:"date"`
+			SeasonID int    `json:"seasonId"`
+		} `json:"standings"`
+	}
+	_ = json.Unmarshal(data, &meta)
+	response := &TeamsResponse{Teams: teams, StandingsAvailable: true}
+	if len(meta.Standings) > 0 {
+		response.AsOf = meta.Standings[0].Date
+		response.Season = meta.Standings[0].SeasonID
+	}
 	return response, nil
 }
 
 // GetTeamDetails fetches team details including record and stats
 func GetTeamDetails(teamID string) (*TeamDetailsResponse, error) {
-	// Try cache first for team details
-	cacheKey := fmt.Sprintf("teamdetails:%s", strings.ToUpper(teamID))
-
-	// Convert team ID to abbreviation
-	var teamAbbr string
-	teamIDInt := -1
-	// If teamID is numeric, use that id
-	if _, err := fmt.Sscanf(teamID, "%d", &teamIDInt); err != nil {
-		// Not numeric: treat as abbreviation (e.g., "wpg")
-		teamAbbr = strings.ToUpper(teamID)
-		if id, ok := abbrevToTeamID[teamAbbr]; ok {
-			teamIDInt = id
-		} else {
-			// Leave teamIDInt as -1 to indicate we don't have a numeric id;
-			// we'll rely on the provided abbreviation when searching standings below.
-			teamIDInt = -1
-		}
+	abbr := strings.ToUpper(teamID)
+	if id, err := strconv.Atoi(teamID); err == nil {
+		abbr = teamIDToAbbr[id]
 	}
-
-	// If we resolved a numeric ID, derive the canonical abbreviation from it
-	if teamIDInt != -1 {
-		if abbr, ok := teamIDToAbbr[teamIDInt]; ok {
-			teamAbbr = abbr
-		} else {
-			return nil, fmt.Errorf("unknown team id: %s", teamID)
-		}
-	}
-
-	// Check cache first for team details
-	if cachedData, err := getCachedRaw(cacheKey); err == nil {
-		log.Printf("Cache hit for team details %s", teamID)
-		var response TeamDetailsResponse
-		if err := json.Unmarshal(cachedData, &response); err == nil {
-			return &response, nil
-		}
-		log.Printf("Failed to unmarshal cached team details: %v", err)
-	}
-
-	// Use the same standings resolution as the home page (handles playoffs when same-day standings are empty).
-	data, err := getStandingsPayloadForUI()
+	response, err := catalogTeamDetails(abbr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get standings data: %w", err)
+		return nil, err
 	}
-
-	var standingsResp struct {
-		Standings []struct {
-			TeamAbbrev struct {
-				Default string `json:"default"`
-			} `json:"teamAbbrev"`
-			TeamName struct {
-				Default string `json:"default"`
-			} `json:"teamName"`
-			TeamCommonName struct {
-				Default string `json:"default"`
-			} `json:"teamCommonName"`
-			DivisionName     string  `json:"divisionName"`
-			ConferenceName   string  `json:"conferenceName"`
-			Wins             int     `json:"wins"`
-			Losses           int     `json:"losses"`
-			OtLosses         int     `json:"otLosses"`
-			GamesPlayed      int     `json:"gamesPlayed"`
-			Points           int     `json:"points"`
-			GoalFor          int     `json:"goalFor"`
-			GoalAgainst      int     `json:"goalAgainst"`
-			GoalDifferential int     `json:"goalDifferential"`
-			L10Wins          int     `json:"l10Wins"`
-			L10Losses        int     `json:"l10Losses"`
-			L10OtLosses      int     `json:"l10OtLosses"`
-			StreakCode       string  `json:"streakCode"`
-			StreakCount      int     `json:"streakCount"`
-			WinPctg          float64 `json:"winPctg"`
-			RecordSummary    struct {
-				LastTen string `json:"lastTen"`
-				Streak  string `json:"streak"`
-			} `json:"recordSummary"`
-		} `json:"standings"`
-	}
-
-	if err := json.Unmarshal(data, &standingsResp); err != nil {
-		return nil, fmt.Errorf("parsing standings response: %w", err)
-	}
-
-	// Find the team in standings and build complete details
-	team := TeamDetails{
-		ID:           teamIDInt,
-		Abbreviation: teamAbbr,
-	}
-
-	for _, standing := range standingsResp.Standings {
-		if standing.TeamAbbrev.Default == teamAbbr || strings.EqualFold(standing.TeamAbbrev.Default, strings.ToUpper(teamID)) {
-			log.Printf("Looking up team details for input=%q resolvedAbbrev=%q", teamID, teamAbbr)
-			// Build complete team details from standings
-			// Populate numeric ID from standings where possible
-			if id, ok := abbrevToTeamID[standing.TeamAbbrev.Default]; ok {
-				team.ID = id
-			}
-			team.Name = standing.TeamName.Default
-			team.TeamName = standing.TeamName.Default
-			team.LocationName = standing.TeamCommonName.Default
-			team.Division.Name = standing.DivisionName
-			team.Conference.Name = standing.ConferenceName
-			// Compute diff and extras
-			gd := standing.GoalDifferential
-			if gd == 0 {
-				gd = standing.GoalFor - standing.GoalAgainst
-			}
-			lastTen := ""
-			if standing.L10Wins != 0 || standing.L10Losses != 0 || standing.L10OtLosses != 0 {
-				lastTen = fmt.Sprintf("%d-%d-%d", standing.L10Wins, standing.L10Losses, standing.L10OtLosses)
-			}
-			streak := ""
-			if standing.StreakCode != "" && standing.StreakCount != 0 {
-				streak = fmt.Sprintf("%s%d", strings.ToUpper(standing.StreakCode), standing.StreakCount)
-			}
-
-			team.Record = []struct {
-				Type           string `json:"type"`
-				Wins           int    `json:"wins"`
-				Losses         int    `json:"losses"`
-				OvertimeLosses int    `json:"overtimeLosses"`
-				GamesPlayed    int    `json:"gamesPlayed"`
-				Points         int    `json:"points"`
-			}{
-				{
-					Type:           "season",
-					Wins:           standing.Wins,
-					Losses:         standing.Losses,
-					OvertimeLosses: standing.OtLosses,
-					GamesPlayed:    standing.GamesPlayed,
-					Points:         standing.Points,
-				},
-			}
-			// Attach the extra fields to TeamDetails struct if present via heuristics
-			team.Stats = []interface{}{map[string]interface{}{
-				"gamesPlayed":  standing.GamesPlayed,
-				"goalsFor":     standing.GoalFor,
-				"goalsAgainst": standing.GoalAgainst,
-				"goalDiff":     gd,
-				"lastTen":      lastTen,
-				"streak":       streak,
-				"winPct":       standing.WinPctg,
-			}}
-			log.Printf("standings entry abbrev=%q teamName=%q teamCommon=%q", standing.TeamAbbrev.Default, standing.TeamName.Default, standing.TeamCommonName.Default)
-			// Found matching standing; stop searching further to avoid accidental overwrites
-			break
-		}
-	}
-
-	// For international teams not in standings, set basic info
-	if team.Name == "" {
-		// Check if it's an international team
-		if _, ok := abbrevToTeamID[teamAbbr]; !ok {
-			// International team
-			switch strings.ToUpper(teamAbbr) {
-			case "USA":
-				team.Name = "United States"
-				team.TeamName = "United States"
-				team.LocationName = "United States"
-			case "CAN":
-				team.Name = "Canada"
-				team.TeamName = "Canada"
-				team.LocationName = "Canada"
-			case "FIN":
-				team.Name = "Finland"
-				team.TeamName = "Finland"
-				team.LocationName = "Finland"
-			case "SWE":
-				team.Name = "Sweden"
-				team.TeamName = "Sweden"
-				team.LocationName = "Sweden"
-			case "CZE":
-				team.Name = "Czechia"
-				team.TeamName = "Czechia"
-				team.LocationName = "Czechia"
-			case "GER":
-				team.Name = "Germany"
-				team.TeamName = "Germany"
-				team.LocationName = "Germany"
-			case "SVK":
-				team.Name = "Slovakia"
-				team.TeamName = "Slovakia"
-				team.LocationName = "Slovakia"
-			case "SUI":
-				team.Name = "Switzerland"
-				team.TeamName = "Switzerland"
-				team.LocationName = "Switzerland"
-			case "FRA":
-				team.Name = "France"
-				team.TeamName = "France"
-				team.LocationName = "France"
-			case "ITA":
-				team.Name = "Italy"
-				team.TeamName = "Italy"
-				team.LocationName = "Italy"
-			case "LAT":
-				team.Name = "Latvia"
-				team.TeamName = "Latvia"
-				team.LocationName = "Latvia"
-			case "DEN":
-				team.Name = "Denmark"
-				team.TeamName = "Denmark"
-				team.LocationName = "Denmark"
-			default:
-				team.Name = teamAbbr
-				team.TeamName = teamAbbr
-				team.LocationName = teamAbbr
+	// Identity and navigation never wait for the standings service.
+	if e, ok := upstream.cached(BaseURL + "/standings/now"); ok && hasNonEmptyStandingsJSON(e.Data) {
+		teams, _ := GetAllTeams()
+		for _, t := range teams.Teams {
+			if t.Abbrev == abbr {
+				team := &response.Teams[0]
+				team.AsOf = teams.AsOf
+				team.Season = teams.Season
+				team.Record = append(team.Record, struct {
+					Type           string `json:"type"`
+					Wins           int    `json:"wins"`
+					Losses         int    `json:"losses"`
+					OvertimeLosses int    `json:"overtimeLosses"`
+					GamesPlayed    int    `json:"gamesPlayed"`
+					Points         int    `json:"points"`
+				}{"season", t.Record.Wins, t.Record.Losses, t.Record.OvertimeLosses, t.GamesPlayed, t.Record.Points})
 			}
 		}
 	}
-
-	// Set logos: prefer ntl for international teams
-	prefix := "nhl"
-	if team.ID > 1000 || (team.Name != "" && team.ID == -1) {
-		prefix = "ntl"
-	}
-	team.Logo = fmt.Sprintf("https://assets.nhle.com/logos/%s/svg/%s_light.svg", prefix, team.Abbreviation)
-	team.DarkLogo = fmt.Sprintf("https://assets.nhle.com/logos/%s/svg/%s_dark.svg", prefix, team.Abbreviation)
-
-	// Determine a wordmark URL (prefer overrides for known exceptions)
-	overrides := map[string]string{
-		"WSH": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/capitals/logos/wsh-wordmark-sept25_ee1aiv",
-		"VGK": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/goldenknights/logos/vgk-wordmark-new",
-		"BOS": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/bruins/logos/BOS-Wordmark-128x44-Dark_iezh8v",
-		"DET": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/redwings/logos/det_wordmark_100_1_wtlln0",
-		"TOR": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/mapleleafs/logos/tor-wordmark",
-		"UTA": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/utah/logos/uta-158x40",
-		"CBJ": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/bluejackets/logos/cbj-wordmark-nationwide4",
-		"CGY": "https://media.d3.nhle.com/image/private/t_q-best/prd/assets/flames/logos/cgy_wordmark_resized_jx4bam",
-	}
-
-	wordmark := ""
-	if override, ok := overrides[team.Abbreviation]; ok {
-		if resp, err := httpClient.Head(override); err == nil && resp.StatusCode == 200 {
-			wordmark = override
-		}
-	}
-	if wordmark == "" {
-		parts := strings.Split(strings.ToLower(team.Name), " ")
-		org := parts[len(parts)-1]
-		heuristic := fmt.Sprintf("https://media.d3.nhle.com/image/private/t_q-best/prd/assets/%s/logos/%s-wordmark", org, strings.ToLower(team.Abbreviation))
-		if resp, err := httpClient.Head(heuristic); err == nil && resp.StatusCode == 200 {
-			wordmark = heuristic
-		}
-	}
-	team.WordmarkURL = wordmark
-
-	response := &TeamDetailsResponse{Teams: []TeamDetails{team}}
-
-	// Cache the team details
-	if cacheData, jsonErr := json.Marshal(response); jsonErr == nil {
-		if valid, reason := isValidForCache(cacheKey, cacheData); valid {
-			if setErr := setCachedRaw(cacheKey, cacheData, determineTTL("static")); setErr != nil {
-				log.Printf("Failed to cache team details for %s: %v", teamID, setErr)
-			}
-		} else {
-			log.Printf("Validation failed for team details %s; not caching: %s", teamID, reason)
-		}
-	}
-
 	return response, nil
 }
 
@@ -1506,51 +473,6 @@ func GetProspects(teamAbbrev string) ([]byte, error) {
 	data, err := io.ReadAll(body)
 	if err != nil {
 		return nil, fmt.Errorf("reading prospects response: %w", err)
-	}
-
-	// Parse prospects response to cache individual players using RosterPlayer
-	var prospectsResp struct {
-		Forwards   []RosterPlayer `json:"forwards"`
-		Defensemen []RosterPlayer `json:"defensemen"`
-		Goalies    []RosterPlayer `json:"goalies"`
-	}
-
-	if err := json.Unmarshal(data, &prospectsResp); err == nil {
-		// Cache individual prospect player data
-		allProspectIDs := []int{}
-		for _, p := range prospectsResp.Forwards {
-			if p.ID > 0 {
-				allProspectIDs = append(allProspectIDs, p.ID)
-			}
-		}
-		for _, p := range prospectsResp.Defensemen {
-			if p.ID > 0 {
-				allProspectIDs = append(allProspectIDs, p.ID)
-			}
-		}
-		for _, p := range prospectsResp.Goalies {
-			if p.ID > 0 {
-				allProspectIDs = append(allProspectIDs, p.ID)
-			}
-		}
-
-		// Instead of fetching each player's data inline (which can trigger
-		// upstream rate limits), only enqueue individual `player:<id>` warm
-		// keys so the queue warmer handles player caching with concurrency
-		// controls and backoff.
-		if redisClient != nil {
-			for _, playerID := range allProspectIDs {
-				pKey := fmt.Sprintf("player:%d", playerID)
-				if err := enqueueWarmKey(pKey); err != nil {
-					log.Printf("GetProspects: failed to enqueue warm key %s: %v", pKey, err)
-				}
-				// small pause to avoid a tight enqueue loop
-				time.Sleep(25 * time.Millisecond)
-			}
-			log.Printf("GetProspects: enqueued %d player warm keys for %s", len(allProspectIDs), teamAbbrev)
-		}
-	} else {
-		log.Printf("Failed to parse prospects response for caching: %v", err)
 	}
 
 	// Build a combined `players` array (roster-like) including any warmed
@@ -1593,7 +515,6 @@ func GetProspects(teamAbbrev string) ([]byte, error) {
 // surfaces a warmed `draftDetails.overallPick` from `player:<id>` cache entries.
 func buildPlayersFromOriginal(original map[string]interface{}, sections []string) []map[string]interface{} {
 	var players []map[string]interface{}
-	inlineFetches := 0
 
 	for _, section := range sections {
 		raw, ok := original[section]
@@ -1628,55 +549,14 @@ func buildPlayersFromOriginal(original map[string]interface{}, sections []string
 				}
 			}
 
-			// Try to pull warmed player data to surface overallPick. First
-			// check local Redis cache; if missing and we haven't exceeded
-			// the inline fetch cap, attempt a limited synchronous GetPlayer
-			// which uses the shared backoff/path and will populate the
-			// player cache for subsequent requests.
-			foundPick := false
-			if id > 0 {
-				if redisClient != nil {
-					if cached, err := getCachedRaw(fmt.Sprintf("player:%d", id)); err == nil {
-						var cp map[string]interface{}
-						if err := json.Unmarshal(cached, &cp); err == nil {
-							if dd, ok := cp["draftDetails"].(map[string]interface{}); ok {
-								if op, ok := dd["overallPick"]; ok {
-									switch v := op.(type) {
-									case float64:
-										m["overallPick"] = int(v)
-									default:
-										m["overallPick"] = v
-									}
-									foundPick = true
-								}
-							}
-						}
-					}
+			if e, ok := upstream.cached(fmt.Sprintf("%s/player/%d/landing", BaseURL, id)); ok {
+				var cp struct {
+					DraftDetails struct {
+						OverallPick int `json:"overallPick"`
+					} `json:"draftDetails"`
 				}
-
-				// If we didn't find a pick in cache, try a limited synchronous
-				// fetch to populate the cache and obtain draftDetails. This is
-				// intentionally bounded to avoid reintroducing rate-limit bursts.
-				if !foundPick && inlineFetches < MaxInlinePlayerFetches {
-					inlineFetches++
-					if pdata, err := GetPlayer(fmt.Sprintf("%d", id)); err == nil {
-						var cp map[string]interface{}
-						if err := json.Unmarshal(pdata, &cp); err == nil {
-							if dd, ok := cp["draftDetails"].(map[string]interface{}); ok {
-								if op, ok := dd["overallPick"]; ok {
-									switch v := op.(type) {
-									case float64:
-										m["overallPick"] = int(v)
-									default:
-										m["overallPick"] = v
-									}
-									foundPick = true
-								}
-							}
-						}
-					} else {
-						log.Printf("GetProspects: inline GetPlayer(%d) failed: %v", id, err)
-					}
+				if json.Unmarshal(e.Data, &cp) == nil && cp.DraftDetails.OverallPick > 0 {
+					m["overallPick"] = cp.DraftDetails.OverallPick
 				}
 			}
 
@@ -1697,206 +577,8 @@ func buildPlayersFromOriginal(original map[string]interface{}, sections []string
 	return players
 }
 
-// GetSchedule fetches the schedule for a given date and caches the raw payload.
-func GetSchedule(date string) ([]byte, error) {
-	cacheKey := fmt.Sprintf("schedule:%s", date)
-
-	// Try cache first
-	if cachedData, err := getCachedRaw(cacheKey); err == nil {
-		log.Printf("Cache hit for schedule:%s", date)
-		return cachedData, nil
-	}
-
-	// Fetch from API using the shared fetch/backoff helper so behavior matches the handler
-	data, err := getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
-		url := fmt.Sprintf("%s/schedule/%s", BaseURL, date)
-		body, err := fetchURL(url)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if cerr := body.Close(); cerr != nil {
-				log.Printf("Error closing response body: %v", cerr)
-			}
-		}()
-		return io.ReadAll(body)
-	}, time.Hour)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
-}
-
-// GetPlayer fetches the player landing JSON and caches the raw payload.
-func GetPlayer(playerID string) ([]byte, error) {
-	cacheKey := fmt.Sprintf("player:%s", playerID)
-
-	// Try cache first
-	if cachedData, err := getCachedRaw(cacheKey); err == nil {
-		log.Printf("Cache hit for player:%s", playerID)
-		return cachedData, nil
-	}
-
-	data, err := getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
-		url := fmt.Sprintf("%s/player/%s/landing", BaseURL, playerID)
-		body, err := fetchURL(url)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if cerr := body.Close(); cerr != nil {
-				log.Printf("Error closing response body: %v", cerr)
-			}
-		}()
-		return io.ReadAll(body)
-	}, time.Hour)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
-}
-
-// parsePlayerFromRawJSON extracts PlayerInfo fields from the full player landing JSON
-func parsePlayerFromRawJSON(rawJSON []byte, basePlayer PlayerInfo) (PlayerInfo, error) {
-	var playerResp struct {
-		PlayerID      int    `json:"playerId"`
-		Headshot      string `json:"headshot"`
-		HeroImage     string `json:"heroImage"`
-		ShootsCatches string `json:"shootsCatches"`
-		BirthCity     struct {
-			Default string `json:"default"`
-		} `json:"birthCity"`
-		BirthStateProvince struct {
-			Default string `json:"default"`
-		} `json:"birthStateProvince"`
-		BirthCountry  string `json:"birthCountry"`
-		FeaturedStats struct {
-			RegularSeason struct {
-				SubSeason struct {
-					Games           int     `json:"gamesPlayed"`
-					Goals           int     `json:"goals"`
-					Assists         int     `json:"assists"`
-					Points          int     `json:"points"`
-					PlusMinus       int     `json:"plusMinus"`
-					PIM             int     `json:"pim"`
-					Shots           int     `json:"shots"`
-					SavePctg        float64 `json:"savePctg"`
-					GoalsAgainstAvg float64 `json:"goalsAgainstAvg"`
-					Wins            int     `json:"wins"`
-					Losses          int     `json:"losses"`
-				} `json:"subSeason"`
-			} `json:"regularSeason"`
-		} `json:"featuredStats"`
-	}
-
-	if err := json.Unmarshal(rawJSON, &playerResp); err != nil {
-		return basePlayer, err
-	}
-
-	// Start with base player data (from roster) and enrich with API data
-	player := basePlayer
-	player.ID = playerResp.PlayerID
-	if player.ID == 0 {
-		player.ID = basePlayer.ID
-	}
-
-	player.Photo = playerResp.Headshot
-	player.ActionShot = playerResp.HeroImage
-	player.ShootsCatches = playerResp.ShootsCatches
-
-	// Set birth place
-	birthParts := []string{}
-	if playerResp.BirthCity.Default != "" {
-		birthParts = append(birthParts, playerResp.BirthCity.Default)
-	}
-	if playerResp.BirthStateProvince.Default != "" {
-		birthParts = append(birthParts, playerResp.BirthStateProvince.Default)
-	}
-	if playerResp.BirthCountry != "" {
-		birthParts = append(birthParts, playerResp.BirthCountry)
-	}
-	if len(birthParts) > 0 {
-		player.BirthPlace = strings.Join(birthParts, ", ")
-	}
-
-	// Set stats based on position
-	subSeason := playerResp.FeaturedStats.RegularSeason.SubSeason
-
-	if player.Position == "G" {
-		// Goalie stats
-		player.Stats = &PlayerStats{
-			Games:          subSeason.Games,
-			Wins:           subSeason.Wins,
-			Losses:         subSeason.Losses,
-			GAA:            subSeason.GoalsAgainstAvg,
-			SavePercentage: subSeason.SavePctg,
-		}
-	} else {
-		// Skater stats
-		player.Stats = &PlayerStats{
-			Games:     subSeason.Games,
-			Goals:     subSeason.Goals,
-			Assists:   subSeason.Assists,
-			Points:    subSeason.Points,
-			PlusMinus: subSeason.PlusMinus,
-			PIM:       subSeason.PIM,
-			Shots:     subSeason.Shots,
-		}
-	}
-
-	return player, nil
-}
-
-// getOrFetchPlayer retrieves player from cache or fetches with retries
-func getOrFetchPlayer(playerID int, basePlayer PlayerInfo) PlayerInfo {
-	// Try to get raw JSON from cache first and parse it
-	cacheKey := fmt.Sprintf("player:%d", playerID)
-	if cachedData, err := getCachedRaw(cacheKey); err == nil {
-		log.Printf("Found cached raw player data for %d", playerID)
-		// Parse the cached raw JSON into PlayerInfo
-		parsedPlayer, parseErr := parsePlayerFromRawJSON(cachedData, basePlayer)
-		if parseErr == nil {
-			return parsedPlayer
-		}
-		log.Printf("Failed to parse cached player data for %d: %v", playerID, parseErr)
-	}
-
-	// Not in cache, need to fetch
-	playerData := basePlayer
-
-	// Retry with exponential backoff
-	backoffDelays := []time.Duration{0, 30 * time.Second, 1 * time.Minute, 2 * time.Minute}
-	for attempt, delay := range backoffDelays {
-		if delay > 0 {
-			log.Printf("Backing off for %v before retrying player %d", delay, playerID)
-			time.Sleep(delay)
-		}
-
-		if err := fetchPlayerData(playerID, &playerData); err != nil {
-			if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
-				if attempt < len(backoffDelays)-1 {
-					log.Printf("429 error for player %d, attempt %d, will retry", playerID, attempt+1)
-					continue
-				} else {
-					log.Printf("429 error for player %d, max retries exceeded, using base data", playerID)
-					break
-				}
-			} else {
-				log.Printf("Non-429 error for player %d: %v, using base data", playerID, err)
-				break
-			}
-		} else {
-			// Success! Player data is already cached in fetchPlayerData
-			log.Printf("Successfully fetched and cached player %d", playerID)
-			break
-		}
-	}
-
-	return playerData
-}
-
 // GetRoster fetches team roster with player stats
-func GetRoster(teamID string) (*RosterResponse, error) {
+func GetRoster(ctx context.Context, teamID string, selected ...string) (*RosterResponse, error) {
 	// Convert team ID or abbreviation into the canonical abbreviation we use
 	var teamAbbr string
 	teamIDInt := -1
@@ -1924,106 +606,33 @@ func GetRoster(teamID string) (*RosterResponse, error) {
 	}
 
 	seasonID := currentSeasonID()
-	cacheKey := fmt.Sprintf("roster:%s-%s", teamAbbr, seasonID)
-
-	// Check cache first
-	if cachedData, err := getCachedRaw(cacheKey); err == nil {
-		log.Printf("Cache hit for roster %s", teamID)
-		// Try the already-serialized RosterResponse shape (players array)
-		var response RosterResponse
-		if err := json.Unmarshal(cachedData, &response); err == nil {
-			if len(response.Players) > 0 {
-				return &response, nil
+	statsPath := "/now"
+	if len(selected) > 0 && selected[0] != "" {
+		seasonID = selected[0]
+		statsPath = "/" + seasonID + "/2"
+	}
+	preseason := false
+	if len(selected) > 0 && seasonID == currentSeasonID() {
+		seasons, err := standingsSeasons(ctx)
+		if err == nil {
+			for _, s := range seasons.Seasons {
+				if strconv.Itoa(s.ID) == seasonID && s.DefaultView == "preseason" {
+					preseason = true
+					statsPath = "/" + seasonID + "/1"
+				}
 			}
-			// If players empty, don't delete yet — try NHL roster endpoint shape below
-		} else {
-			log.Printf("Failed to unmarshal cached roster as RosterResponse: %v", err)
-		}
-
-		// Try the NHL roster endpoint shape (forwards/defensemen/goalies)
-		var rosterResp struct {
-			Forwards   []RosterPlayer `json:"forwards"`
-			Defensemen []RosterPlayer `json:"defensemen"`
-			Goalies    []RosterPlayer `json:"goalies"`
-		}
-		if err := json.Unmarshal(cachedData, &rosterResp); err == nil {
-			// If we have players in any of the arrays, convert to RosterResponse and return
-			count := len(rosterResp.Forwards) + len(rosterResp.Defensemen) + len(rosterResp.Goalies)
-			if count > 0 {
-				var players []PlayerInfo
-
-				makePlayer := func(r RosterPlayer, pos, fullPos string) *PlayerInfo {
-					first := pickName(r.FirstName)
-					last := pickName(r.LastName)
-					name := strings.TrimSpace(first + " " + last)
-					return &PlayerInfo{
-						ID:            r.ID,
-						Name:          name,
-						Number:        r.SweaterNumber,
-						Position:      pos,
-						FullPosition:  fullPos,
-						Photo:         r.Headshot,
-						ShootsCatches: r.ShootsCatches,
-						Stats:         &PlayerStats{},
-					}
-				}
-
-				for _, r := range rosterResp.Forwards {
-					p := makePlayer(r, "F", "Forward")
-					enriched := getOrFetchPlayer(r.ID, *p)
-					if enriched.Name == "" {
-						enriched.Name = p.Name
-					}
-					players = append(players, enriched)
-				}
-				for _, r := range rosterResp.Defensemen {
-					p := makePlayer(r, "D", "Defenseman")
-					enriched := getOrFetchPlayer(r.ID, *p)
-					if enriched.Name == "" {
-						enriched.Name = p.Name
-					}
-					players = append(players, enriched)
-				}
-				for _, r := range rosterResp.Goalies {
-					p := makePlayer(r, "G", "Goalie")
-					enriched := getOrFetchPlayer(r.ID, *p)
-					if enriched.Name == "" {
-						enriched.Name = p.Name
-					}
-					players = append(players, enriched)
-				}
-
-				return &RosterResponse{Players: players}, nil
-			}
-		} else {
-			log.Printf("Failed to unmarshal cached roster as NHL roster shape: %v", err)
-		}
-
-		// If we get here, cached data wasn't usable — delete and fall through to fetch
-		log.Printf("Cached roster for %s is empty/null or unrecognized — treating as cache miss and deleting key", teamID)
-		if redisClient != nil {
-			_ = redisClient.Del(redisCtx, cacheKey).Err()
 		}
 	}
-
-	// Cache miss - fetch with backoff
-	data, err := getCachedOrFetchWithBackoff(cacheKey, func() ([]byte, error) {
-		url := fmt.Sprintf("%s/roster/%s/%s", BaseURL, strings.ToLower(teamAbbr), seasonID)
-		body, err := fetchURL(url)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if cerr := body.Close(); cerr != nil {
-				log.Printf("Error closing response body: %v", cerr)
-			}
-		}()
-		return io.ReadAll(body)
-	}, determineTTL("roster")) // Rosters are static for the season (dynamic TTL)
-
+	statsURL := BaseURL + "/club-stats/" + teamAbbr + statsPath
+	rosterURL := fmt.Sprintf("%s/roster/%s/%s", BaseURL, strings.ToLower(teamAbbr), seasonID)
+	// Start the two independent resources together; never fetch every player.
+	statsDone := make(chan struct{})
+	go func() { defer close(statsDone); _, _ = upstream.get(ctx, statsURL) }()
+	entry, err := upstream.get(ctx, rosterURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get roster data: %w", err)
+		return nil, err
 	}
+	data := []byte(entry.Data)
 
 	// Unmarshal into typed RosterPlayer slices so we can pick localized names reliably
 	var rosterResp struct {
@@ -2050,15 +659,14 @@ func GetRoster(teamID string) (*RosterResponse, error) {
 			FullPosition:  fullPos,
 			Photo:         r.Headshot,
 			ShootsCatches: r.ShootsCatches,
-			Stats:         &PlayerStats{},
+			Stats:         nil,
 		}
 	}
 
 	// Add forwards with enrichment
 	for _, r := range rosterResp.Forwards {
-		log.Printf("Processing forward: ID=%d, Name=%s %s", r.ID, pickName(r.FirstName), pickName(r.LastName))
 		p := makePlayer(r, "F", "Forward")
-		enriched := getOrFetchPlayer(r.ID, *p)
+		enriched := *p
 		if enriched.Name == "" {
 			enriched.Name = p.Name
 		}
@@ -2071,7 +679,7 @@ func GetRoster(teamID string) (*RosterResponse, error) {
 	// Add defensemen with enrichment
 	for _, r := range rosterResp.Defensemen {
 		p := makePlayer(r, "D", "Defenseman")
-		enriched := getOrFetchPlayer(r.ID, *p)
+		enriched := *p
 		if enriched.Name == "" {
 			enriched.Name = p.Name
 		}
@@ -2081,155 +689,52 @@ func GetRoster(teamID string) (*RosterResponse, error) {
 	// Add goalies with enrichment
 	for _, r := range rosterResp.Goalies {
 		p := makePlayer(r, "G", "Goalie")
-		enriched := getOrFetchPlayer(r.ID, *p)
+		enriched := *p
 		if enriched.Name == "" {
 			enriched.Name = p.Name
 		}
 		players = append(players, enriched)
 	}
 
-	resp := &RosterResponse{Players: players}
+	select {
+	case <-statsDone:
+	case <-ctx.Done():
+	}
+	season := enrichRosterStats(teamAbbr, players, statsPath)
+	if preseason {
+		if err := preseasonPlayerStats(ctx, teamAbbr, seasonID, players); err != nil {
+			return nil, err
+		}
+		season, _ = strconv.Atoi(seasonID)
+	}
+	resp := &RosterResponse{Players: players, Season: season, UpdatedAt: entry.UpdatedAt, Stale: time.Now().After(entry.FreshUntil)}
+	if preseason {
+		resp.GameType = 1
+	} else {
+		resp.GameType = 2
+	}
+	if e, ok := upstream.cached(statsURL); ok {
+		if e.UpdatedAt.Before(resp.UpdatedAt) {
+			resp.UpdatedAt = e.UpdatedAt
+		}
+		resp.Stale = resp.Stale || time.Now().After(e.FreshUntil)
+	}
 
 	return resp, nil
 }
 
-// fetchPlayerData fetches player stats and photo from the player landing endpoint
-// It caches the full raw JSON response and parses needed fields into the player struct
-func fetchPlayerData(playerID int, player *PlayerInfo) error {
-	url := fmt.Sprintf("%s/player/%d/landing", BaseURL, playerID)
-
-	body, err := fetchURL(url)
-	if err != nil {
-		return fmt.Errorf("failed to fetch player %d data: %w", playerID, err)
-	}
-	defer func() {
-		if cerr := body.Close(); cerr != nil {
-			log.Printf("Error closing response body: %v", cerr)
-		}
-	}()
-
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return fmt.Errorf("failed to read player %d response: %w", playerID, err)
-	}
-
-	// Cache the full raw JSON response for use by both roster and player detail endpoints
-	cacheKey := fmt.Sprintf("player:%d", playerID)
-	if setErr := setCachedRaw(cacheKey, data, time.Hour); setErr != nil {
-		log.Printf("Failed to cache raw player data for %d: %v", playerID, setErr)
-	}
-
-	var playerResp struct {
-		Headshot      string `json:"headshot"`
-		HeroImage     string `json:"heroImage"`
-		ShootsCatches string `json:"shootsCatches"`
-		BirthCity     struct {
-			Default string `json:"default"`
-		} `json:"birthCity"`
-		BirthStateProvince struct {
-			Default string `json:"default"`
-		} `json:"birthStateProvince"`
-		BirthCountry  string `json:"birthCountry"`
-		FeaturedStats struct {
-			RegularSeason struct {
-				SubSeason struct {
-					Games           int     `json:"gamesPlayed"`
-					Goals           int     `json:"goals"`
-					Assists         int     `json:"assists"`
-					Points          int     `json:"points"`
-					PlusMinus       int     `json:"plusMinus"`
-					PIM             int     `json:"pim"`
-					Shots           int     `json:"shots"`
-					SavePctg        float64 `json:"savePctg"`
-					GoalsAgainstAvg float64 `json:"goalsAgainstAvg"`
-					Wins            int     `json:"wins"`
-					Losses          int     `json:"losses"`
-				} `json:"subSeason"`
-			} `json:"regularSeason"`
-		} `json:"featuredStats"`
-	}
-
-	if err := json.Unmarshal(data, &playerResp); err != nil {
-		return fmt.Errorf("failed to parse player %d response: %w", playerID, err)
-	}
-
-	// Ensure ID is always set (critical for caching)
-	player.ID = playerID
-
-	// Set photo
-	player.Photo = playerResp.Headshot
-	player.ActionShot = playerResp.HeroImage
-	player.ShootsCatches = playerResp.ShootsCatches
-
-	// Set birth place
-	birthParts := []string{}
-	if playerResp.BirthCity.Default != "" {
-		birthParts = append(birthParts, playerResp.BirthCity.Default)
-	}
-	if playerResp.BirthStateProvince.Default != "" {
-		birthParts = append(birthParts, playerResp.BirthStateProvince.Default)
-	}
-	if playerResp.BirthCountry != "" {
-		birthParts = append(birthParts, playerResp.BirthCountry)
-	}
-	if len(birthParts) > 0 {
-		player.BirthPlace = strings.Join(birthParts, ", ")
-	}
-
-	// Set stats based on position
-	subSeason := playerResp.FeaturedStats.RegularSeason.SubSeason
-
-	if player.Position == "G" {
-		// Goalie stats
-		player.Stats = &PlayerStats{
-			Games:          subSeason.Games,
-			Wins:           subSeason.Wins,
-			Losses:         subSeason.Losses,
-			GAA:            subSeason.GoalsAgainstAvg,
-			SavePercentage: subSeason.SavePctg,
-		}
-	} else {
-		// Skater stats
-		player.Stats = &PlayerStats{
-			Games:     subSeason.Games,
-			Goals:     subSeason.Goals,
-			Assists:   subSeason.Assists,
-			Points:    subSeason.Points,
-			PlusMinus: subSeason.PlusMinus,
-			PIM:       subSeason.PIM,
-			Shots:     subSeason.Shots,
-		}
-	}
-
-	return nil
-}
-func fetchURL(url string) (io.ReadCloser, error) {
-	// Wait for rate limiter permission
-	if err := apiRateLimiter.Wait(context.Background()); err != nil {
-		return nil, fmt.Errorf("rate limiter error: %w", err)
-	}
-
-	resp, err := httpClient.Get(url)
+func fetchURL(url string) (io.ReadCloser, error) { return fetchURLContext(context.Background(), url) }
+func fetchURLContext(ctx context.Context, url string) (io.ReadCloser, error) {
+	entry, err := upstream.get(ctx, url)
 	if err != nil {
 		return nil, err
 	}
-
-	if resp.StatusCode != http.StatusOK {
-		if cerr := resp.Body.Close(); cerr != nil {
-			log.Printf("Error closing response body: %v", cerr)
-		}
-		return nil, fmt.Errorf("upstream status %d for %s", resp.StatusCode, url)
-	}
-
-	return resp.Body, nil
+	return io.NopCloser(bytes.NewReader(entry.Data)), nil
 }
-
-// rateLimitedGet performs an HTTP GET with rate limiting applied
-func rateLimitedGet(url string) (*http.Response, error) {
-	// Wait for rate limiter permission
-	if err := apiRateLimiter.Wait(context.Background()); err != nil {
-		return nil, fmt.Errorf("rate limiter error: %w", err)
+func rateLimitedGetContext(ctx context.Context, url string) (*http.Response, error) {
+	body, err := fetchURLContext(ctx, url)
+	if err != nil {
+		return nil, err
 	}
-
-	return http.Get(url)
+	return &http.Response{StatusCode: http.StatusOK, Body: body, Header: make(http.Header)}, nil
 }

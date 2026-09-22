@@ -13,3 +13,5 @@ hockey
 *.swo
 
 dist
+
+node_modules/

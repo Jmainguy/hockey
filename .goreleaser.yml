@@ -86,7 +86,7 @@ kos:
       org.opencontainers.image.vendor: Jmainguy
       org.opencontainers.image.url: "https://github.com/Jmainguy/hockey"
       org.opencontainers.image.source: "https://github.com/Jmainguy/hockey"
-      org.opencontainers.image.description: "A real-time NHL fan site for scores, standings, schedules, rosters, and player statistics"
+      org.opencontainers.image.description: "Barnwide hockey scores, rosters, standings and playoff brackets"
       org.opencontainers.image.licenses: "GPL-2.0-only"
     annotations:
       org.opencontainers.image.created: "{{.Date}}"
@@ -97,7 +97,7 @@ kos:
       org.opencontainers.image.vendor: Jmainguy
       org.opencontainers.image.url: "https://github.com/Jmainguy/hockey"
       org.opencontainers.image.source: "https://github.com/Jmainguy/hockey"
-      org.opencontainers.image.description: "A real-time NHL fan site for scores, standings, schedules, rosters, and player statistics"
+      org.opencontainers.image.description: "Barnwide hockey scores, rosters, standings and playoff brackets"
       org.opencontainers.image.licenses: "GPL-2.0-only"
       
     # Bare uses a tag on the $KO_DOCKER_REPO without anything additional.

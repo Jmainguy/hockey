@@ -1,247 +1,122 @@
-# NHL Fan Hub
+# Barnwide
 
-A beautiful, real-time web application for NHL fans to explore teams, view current standings, browse rosters, and dive deep into player statistics and career histories. Built with Go and vanilla JavaScript, this app provides a fast, responsive interface to all the NHL data you need.
+An independent NHL fan site for team rosters, scores, schedules, standings, and
+player statistics. Go serves the pages and API; vanilla JavaScript and locally
+compiled Tailwind CSS provide the interface. Templates and assets are embedded
+in the production binary.
 
-## 🏒 Features
+## Run locally
 
-### Team & Standings
-- Browse all 32 NHL teams organized by conference and division
-- View comprehensive league standings with filtering by conference or division
-- Real-time team records (wins, losses, OT losses, points, points percentage)
-- Team logos and visual branding
+Requires Go 1.25+ and Node.js 22+ with npm.
 
-### Rosters & Players
-- Complete team rosters for the current season
-- Search and sort players by name, position, goals, assists, points, and more
-- Player position filtering (Forwards, Defensemen, Goalies)
-- Direct navigation from roster to detailed player pages
-
-### Player Statistics
-- Detailed player profiles with headshots and action photos
-- Full career statistics across all seasons and leagues
-- Season-by-season breakdown with NHL team logos
-- Advanced stats expansion for detailed performance metrics
-- Awards and achievements tracking
-- Playoff vs regular season indicators
-- Interactive stat highlighting and filtering
-
-### Design
-- 🎨 Modern, responsive design with NHL-inspired styling
-- 📱 Mobile-friendly interface
-- ⚡ Fast loading with client-side caching
-- 🖼️ Dynamic team colors and action photography
-- ✨ Smooth transitions and hover effects
-
-## 🏗️ Architecture
-
-### Backend
-- **Language**: Go 1.27+
-- **Framework**: Gorilla Mux (routing)
-- **API Integration**: NHL Stats API v1 (https://api-web.nhle.com/v1)
-- **Deployment**: Docker via ko with embedded static assets
-- **Caching**: In-memory caching for improved performance
-
-### Frontend
-- **HTML5** with semantic structure
-- **Tailwind CSS** for utility-first styling
-- **Custom CSS** for specialized components
-- **Vanilla JavaScript** (no framework dependencies)
-- **Modular JS** architecture (app.js, team.js, player.js, standings.js)
-
-## 📁 Project Structure
-
-```
-hockey/
-├── main.go              # Server setup, HTTP handlers, embedded files
-├── nhl_api.go          # NHL API client functions and data enrichment
-├── models.go           # Data structures for API responses
-├── go.mod              # Go module definition
-├── .ko.yaml            # Ko configuration for container builds
-├── templates/
-│   ├── index.html      # Team selection page (by conference/division)
-│   ├── standings.html  # League standings with filters
-│   ├── team.html       # Team details and roster page
-│   └── player.html     # Player statistics and career page
-└── static/
-    ├── style.css       # Custom styles and legacy components
-    ├── app.js          # Main page: team cards and grouping
-    ├── standings.js    # Standings page: filtering and rankings
-    ├── team.js         # Team page: roster display, search, sort
-    └── player.js       # Player page: stats, awards, seasons
+```sh
+npm ci
+make dev
 ```
 
-## 🚀 Building and Running
+Open http://localhost:8080. Development serves templates and assets from disk;
+refresh after edits, and run `npm run build` after changing utility classes.
+Go changes require rebuilding/restarting the server.
 
-### Prerequisites
-- Go 1.21 or higher
-- A web browser
-- Internet connection (to access NHL API)
-
-### Local Development
-
-```bash
-# Download dependencies
-go mod download
-
-# Run the server directly
-go run .
+```sh
+make build       # compile CSS and build the embedded binary
+./hockey         # production-style local run
+make ci          # build, Go race tests, vet, JS tests, whitespace validation
 ```
 
-The server will start on `http://localhost:8080`
+Generated `static/utilities.css` is checked in so Go-only release/container
+builds contain the stylesheet. Regenerate it with `npm run build` when editing
+frontend classes. `package-lock.json` pins build dependencies.
 
-### Build Binary
+## Data reliability
 
-```bash
-# Build the application
-go build -o hockey
+- `/api/teams` is a stable 32-team catalog. Basic navigation and team identity
+  do not depend on NHL availability.
+- `/api/standings` uses the NHL's latest available standings and returns the
+  season and effective date. Offseason standings are never presented as a new
+  season's results.
+- All upstream HTTP requests pass through one cache and limiter. Concurrent
+  misses share a request. Game details are fetched once, then enriched locally.
+- Cached data is served immediately. Expired fresh data triggers one bounded
+  background refresh; the previous snapshot remains usable for up to seven days.
+- HTTP 429/503 activates a cooldown honoring `Retry-After`. Failures are briefly
+  suppressed; visitor requests do not sleep through exponential retries.
+- Freshness: live schedules/game details 20 seconds, upcoming schedules two
+  minutes, final games 24 hours, standings/player/team stats 15 minutes,
+  rosters/prospects one hour. No roster is cached permanently.
+- Rosters fetch one bulk club-statistics payload instead of one request per
+  player. The statistics season is labeled. Missing statistics are dashes,
+  while known zero values remain zero.
+- Memory caching works without Redis. With `REDIS_ADDR`, versioned snapshots,
+  request leases, an aggregate two-requests-per-second budget, and cooldowns
+  are shared between replicas. Ownership-checked lease release prevents a
+  previous fetch from deleting another worker's lock.
+- Redis failures preserve local snapshots. Cold misses fail promptly when the
+  configured shared cache is unavailable, avoiding a new upstream stampede.
+- Successful responses expose `X-Data-Updated` and, when applicable,
+  `X-Data-Stale`. The UI provides freshness notices and retry controls.
+- Fetches have a six-second HTTP timeout and eight-second total fetch budget.
+  Shared cache fills can finish after an individual visitor disconnects, but
+  are bounded and reused by other readers. Direct request waits honor context
+  cancellation. Browser requests time out after 12 seconds.
 
-# Run the binary
-./hockey
-```
+The retired `warm:queue`, `warm:scheduled`, and unversioned cache entries are
+ignored. No startup sweep fetches every team's roster or prospects.
 
-### Container Build with Ko
+## Configuration
 
-```bash
-# Install ko if you haven't already
-go install github.com/google/ko@latest
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `8080` | HTTP port |
+| `REDIS_ADDR` | unset | Optional shared Redis server, `host:port` |
+| `FRONTEND_DIST_DIR` | embedded | Development static directory (`static`) |
+| `TEMPLATES_DIR` | embedded | Development HTML directory (`templates`) |
+| `NHL_API_BASE_URL` | official NHL v1 URL | Local integration-test upstream override |
 
-# Build and push to a registry (requires KO_DOCKER_REPO env var)
-export KO_DOCKER_REPO=your-registry/your-username
-ko build --bare .
+`API_RATE_LIMIT` and `WARMER_CONCURRENCY` from the old warmer are no longer used.
+The conservative shared request budget is defined in `upstream.go`.
 
-# Or build locally without pushing
-ko build --local --bare .
-```
+## Pages and API
 
-The application uses Go's `embed` directive to bundle all static assets and templates into the binary, making it ideal for containerized deployments.
+Public pages: `/`, `/scores`, `/standings`, `/team/{abbrev}`,
+`/team-schedule/{abbrev}`, `/player/{id}`, `/game/{id}`,
+`/playoff-series/{season}/{letter}`, `/coach?team={abbrev}`, and
+`/trivia?team={abbrev}`.
 
-## 📡 API Endpoints
+API endpoints: `/api/teams`, `/api/standings`, `/api/team/{abbrev}`,
+`/api/roster/{abbrev}`, `/api/prospects/{abbrev}`, `/api/player/{id}`,
+`/api/player-bio/{id}`, `/api/schedule/{date}`,
+`/api/team-schedule/{abbrev}`, `/api/gamecenter/{id}/landing`,
+`/api/playoff-bracket`, `/api/schedule/playoff-series/{season}/{letter}`,
+`/api/team-news/{abbrev}`, `/api/team-transactions/{abbrev}`, `/api/videos/{id}`.
 
-### Frontend Routes
-- `GET /` - Team selection page (organized by conference/division)
-- `GET /standings` - League standings with filters
-- `GET /team/{teamId}` - Team details and roster page
-- `GET /player/{playerId}` - Player statistics and career page
+`/healthz` is a local application health endpoint, independent of NHL availability.
+`/robots.txt`, `/sitemap.xml`, and `/llms.txt` describe the public site. Page
+metadata and structured data are server-rendered. CSS and script URLs have
+content-derived versions so browser caches cannot mix old and new assets.
 
-### Backend API Routes
-- `GET /api/teams` - Get all NHL teams with current records
-- `GET /api/team/{teamId}` - Get team details (record, division, conference)
-- `GET /api/roster/{teamId}` - Get current season team roster with player stats
-- `GET /api/player/{playerId}` - Get player landing data (enriched with team abbreviations)
+## Tests
 
-## 🏒 NHL API Data Sources
+Go tests use local HTTP fixtures and an in-process Redis implementation; they
+never require the NHL or production cluster. Coverage includes concurrent
+requests, multiple replicas, cooldowns, stale recovery, canceled waits, empty
+standings, bulk roster stats, metadata, routes, and invalid identifiers.
 
-This application is powered by the **official NHL Stats API** and wouldn't be possible without the excellent documentation from the community:
+Node tests check JavaScript syntax, missing-vs-zero statistics, and score date
+navigation races. Browser checks are recorded in `LOCAL-VALIDATION.md`.
 
-### API Documentation Credits
-- **NHL API Reference by dword4**: [https://gitlab.com/dword4/nhlapi/-/blob/master/new-api.md](https://gitlab.com/dword4/nhlapi/-/blob/master/new-api.md)
-- **NHL API Reference by Zmalski**: [https://github.com/Zmalski/NHL-API-Reference](https://github.com/Zmalski/NHL-API-Reference)
-- **NHL.com**: Official data provider - all statistics, player information, and team data
+## Design
 
-### Key Endpoints Used
-- **Base URL**: `https://api-web.nhle.com/v1`
-- `/standings/{date}` - Current standings data
-- `/roster/{teamAbbrev}/{seasonId}` - Team rosters
-- `/player/{playerId}/landing` - Player career statistics and details
+`BRAND.md` describes the scorebook visual language. Main navigation is consistent
+across pages; scores and player cards are real keyboard-accessible links.
+Responsive layouts support narrow phones, and motion respects user preferences.
 
-The application enriches API responses with team abbreviation mappings for consistent logo display and navigation.
+## Release
 
-## ✨ Features Explained
+This work does not deploy or change cluster configuration. Existing GoReleaser
+and ko workflows remain in place. Use Conventional Commits; pushes to `main`
+can trigger the repository's release automation. Deployment health probes and
+resource budgets remain a separate cluster-manifest task.
 
-### Team Selection (Home Page)
-- All 32 NHL teams organized by conference (Eastern/Western) and division
-- Team logos with automatic fallback handling
-- Real-time records (wins, losses, OT losses, points)
-- Direct links to team pages and standings
-
-### Standings Page
-- **League View**: Full NHL rankings
-- **Conference View**: Eastern or Western conference standings
-- **Division View**: Atlantic, Metropolitan, Central, or Pacific
-- Displays: Rank, Team Logo, GP, W, L, OT, Points, Points %
-- Sortable by points with wins as tiebreaker
-
-### Team Details & Roster
-- Team header with logo, division, and conference
-- Current season record with colorful stat cards
-- Complete roster with player headshots
-- **Search**: Filter players by name
-- **Sort**: By goals, assists, points, games played, save %, GAA
-- **Position Filter**: All, Forwards, Defensemen, Goalies
-- Click any player to view detailed stats
-
-### Player Pages
-- Hero card with player photo, jersey number, position
-- Full name display with fallback handling
-- **Overview Tab**: Current season featured stats
-- **Seasons Tab**: Career history across all leagues
-  - NHL seasons show official team logos
-  - Playoff vs Regular Season indicators
-  - Season cards with expandable advanced stats
-  - Best stats highlighting per visible league
-- **Awards Tab**: Career achievements and honors
-- League filtering (NHL, AHL, college, international)
-- Dynamic background with team action shots
-- Navigation back to team or home
-
-## 🎯 Performance & Caching
-
-- **Server-side caching**: Team details and rosters cached for 5 minutes
-- **In-memory storage**: Fast data retrieval with automatic expiration
-- **Client-side**: Minimal bundle size with vanilla JavaScript
-- **Embedded assets**: All static files compiled into binary (no external dependencies)
-- **API timeout**: 10-second protection on external calls
-
-## 🌐 Browser Compatibility
-
-- Chrome/Edge 90+
-- Firefox 88+
-- Safari 14+
-- Mobile browsers (iOS Safari, Chrome Mobile)
-
-## 🎟️ Support Your Team!
-
-Love hockey? **Get out there and support your local team!** Whether it's NHL, AHL, ECHL, college, or junior hockey - live hockey is the best hockey. Check your team's schedule and grab tickets today! 🏒
-
----
-
-**Go watch a game. You won't regret it.**
-
-## 🙏 Acknowledgments
-
-- **NHL.com** - For providing the comprehensive stats API that powers this application
-- **dword4** - For the excellent NHL API documentation
-- **Zmalski** - For the detailed NHL API reference guide  
-
-## 📄 License
-
-See LICENSE file for details.
-
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to:
-- Report bugs or request features via GitHub Issues
-- Submit pull requests for improvements
-- Share feedback and suggestions
-
-### Commit messages (Conventional Commits)
-
-This repository uses **[Conventional Commits](https://www.conventionalcommits.org/)**. Pull request titles and commit messages should follow that format so automated releases and changelogs stay correct.
-
-**Common types:** `feat` (new behavior), `fix` (bug fixes), `docs`, `chore`, `refactor`, `test`, `ci`, `perf`, `build`. Add a scope in parentheses if it helps, e.g. `feat(api): add playoff bracket endpoint`.
-
-**Examples:**
-
-- `feat: add playoff series schedule page`
-- `fix: handle empty standings during playoffs`
-- `docs: update API section in README`
-
-Breaking changes can be noted in the footer or with `!` after the type (e.g. `feat!: remove legacy endpoint`) per the spec.
-
-Pushes to `main` with appropriate conventional commits trigger new releases via the project’s release workflow.
-
----
-
-**Built with ❤️ for NHL fans everywhere**
-
-*Go support your local team!*
+Data and team imagery are provided by the NHL. This project is not affiliated
+with or endorsed by the NHL. See `LICENSE` for the project license.

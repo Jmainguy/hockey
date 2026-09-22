@@ -1,4 +1,4 @@
-// NHL Fan Hub - Team Details
+// Barnwide - Team Details
 let currentTeamId = null;
 let currentTeamAbbrev = null;
 let allPlayers = [];
@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (currentTeamId) {
         loadTeamDetails();
-        loadRoster();
+        setupRosterSeasons();
     } else {
         showError('No team selected. Please go back and select a team.');
     }
@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function loadTeamDetails() {
     try {
-        const response = await fetch(`/api/team/${currentTeamId}`);
+        const response = await hockeyFetch(`/api/team/${currentTeamId}`);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -85,7 +85,7 @@ async function loadTeamDetails() {
         if (data.teams && data.teams.length > 0) {
             const team = data.teams[0];
             // Load standings to get division/conference ranks
-            await loadStandingsForRanks(team);
+
             displayTeamDetails(team);
         } else {
             showError('Team not found');
@@ -93,49 +93,6 @@ async function loadTeamDetails() {
     } catch (error) {
         console.error('Error loading team details:', error);
         showError(`Error loading team details: ${error.message}`);
-    }
-}
-
-async function loadStandingsForRanks(team) {
-    try {
-        const response = await fetch('/api/teams');
-        if (!response.ok) return;
-        
-        const data = await response.json();
-        if (!data.teams || data.teams.length === 0) return;
-        
-        // Calculate division rank
-        const divisionTeams = data.teams
-            .filter(t => t.division === team.division.name)
-            .sort((a, b) => {
-                if (b.record.points !== a.record.points) {
-                    return b.record.points - a.record.points;
-                }
-                return b.record.wins - a.record.wins;
-            });
-        
-        const divisionRank = divisionTeams.findIndex(t => t.id === team.id) + 1;
-        
-        // Calculate conference rank
-        const conferenceTeams = data.teams
-            .filter(t => t.conference === team.conference.name)
-            .sort((a, b) => {
-                if (b.record.points !== a.record.points) {
-                    return b.record.points - a.record.points;
-                }
-                return b.record.wins - a.record.wins;
-            });
-        
-        const conferenceRank = conferenceTeams.findIndex(t => t.id === team.id) + 1;
-        
-        // Store ranks on team object
-        team.divisionRank = divisionRank;
-        team.conferenceRank = conferenceRank;
-        team.divisionTotal = divisionTeams.length;
-        team.conferenceTotal = conferenceTeams.length;
-        
-    } catch (error) {
-        console.error('Error loading standings for ranks:', error);
     }
 }
 
@@ -156,7 +113,7 @@ function displayTeamDetails(team) {
     if (typeof document !== 'undefined') {
         try {
             if (team.name && team.name.trim() !== '') {
-                document.title = team.name + ' — Hockey';
+                document.title = team.name + ' · Hockey';
             }
         } catch (e) {
             // ignore
@@ -165,11 +122,11 @@ function displayTeamDetails(team) {
     
     // Display division with rank
     const divisionRankText = formatRank(team.divisionRank);
-    document.getElementById('teamDivision').textContent = `${team.division.name} - ${divisionRankText}`;
+    document.getElementById('teamDivision').textContent = team.division.name;
 
     // Display conference with rank
     const conferenceRankText = formatRank(team.conferenceRank);
-    document.getElementById('teamConference').textContent = `${team.conference.name} - ${conferenceRankText}`;
+    document.getElementById('teamConference').textContent = team.conference.name;
 
     // Header population handled by shared renderer above
     
@@ -276,7 +233,7 @@ async function loadTeamNews() {
         newsError.classList.add('hidden');
         newsBody.innerHTML = '';
 
-        const resp = await fetch(`/api/team-news/${currentTeamId}`);
+        const resp = await hockeyFetch(`/api/team-news/${currentTeamId}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         renderNewsList(data.stories || []);
@@ -453,7 +410,7 @@ async function loadTransactions() {
     body.innerHTML = '';
     try {
         if (!currentTeamId) throw new Error('No team selected');
-        const resp = await fetch(`/api/team-transactions/${currentTeamId}`);
+        const resp = await hockeyFetch(`/api/team-transactions/${currentTeamId}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         const txs = data.transactions || [];
@@ -512,7 +469,7 @@ async function loadProspects() {
             return;
         }
         
-        const response = await fetch(`/api/prospects/${currentTeamAbbrev}`);
+        const response = await hockeyFetch(`/api/prospects/${currentTeamAbbrev}`);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -535,54 +492,6 @@ async function loadProspects() {
         // `overallPick` include it so sorting works immediately like roster.
         allProspects = prospects.map(p => ({ ...p, overallPick: (p.overallPick ?? 999999) }));
         displayProspects(allProspects);
-        prospectsLoading.textContent = 'Loading draft details...';
-        
-        // Fetch detailed information in batches with delays to avoid rate limiting
-        const batchSize = 5;
-        const delayMs = 200; // 200ms delay between batches
-        
-        for (let i = 0; i < prospects.length; i += batchSize) {
-            const batch = prospects.slice(i, i + batchSize);
-            
-            const batchResults = await Promise.all(
-                batch.map(async (prospect, idx) => {
-                    try {
-                        // Add small delay for each request in batch
-                        if (idx > 0) await delay(50);
-                        
-                        const detailResponse = await fetch(`/api/player/${prospect.id}`);
-                        if (detailResponse.ok) {
-                            const detailData = await detailResponse.json();
-                            return {
-                                ...prospect,
-                                draftDetails: detailData.draftDetails,
-                                overallPick: detailData.draftDetails?.overallPick || 999999
-                            };
-                        }
-                    } catch (err) {
-                        console.error(`Error fetching details for prospect ${prospect.id}:`, err);
-                    }
-                    return { ...prospect, overallPick: 999999 };
-                })
-            );
-            
-            // Update allProspects with this batch
-            batchResults.forEach((detailedProspect, idx) => {
-                const originalIdx = i + idx;
-                if (originalIdx < allProspects.length) {
-                    allProspects[originalIdx] = detailedProspect;
-                }
-            });
-            
-            // Backend provides sorted order; just re-render with updated data
-            displayProspects(allProspects);
-            
-            // Delay before next batch
-            if (i + batchSize < prospects.length) {
-                await delay(delayMs);
-            }
-        }
-        
         // Cache the results
         prospectsCache[currentTeamAbbrev] = allProspects;
         
@@ -602,9 +511,7 @@ function displayProspects(prospects) {
     if (prospects && prospects.length > 0) {
         prospects.forEach(prospect => {
             const card = createProspectCard(prospect);
-            card.addEventListener('click', function() {
-                window.location.href = `/player/${prospect.id}`;
-            });
+
             prospectsBody.appendChild(card);
         });
     } else {
@@ -613,8 +520,8 @@ function displayProspects(prospects) {
 }
 
 function createProspectCard(prospect) {
-    const card = document.createElement('div');
-    
+    const card = document.createElement('a');
+    card.href = `/player/${prospect.id}`;
     // Fix position display: R -> RW, L -> LW
     let displayPosition = prospect.positionCode || 'F';
     if (displayPosition === 'R') displayPosition = 'RW';
@@ -672,21 +579,40 @@ function createProspectCard(prospect) {
     return card;
 }
 
+let rosterRequest=0;
+async function setupRosterSeasons(){
+ const select=document.getElementById('rosterYear');
+ select.onchange=()=>loadRoster();
+ try {
+  const seasons=await(await hockeyFetch(`/api/roster-seasons/${currentTeamId}`)).json();
+  select.replaceChildren(...seasons.sort((a,b)=>b-a).map(id=>{const option=document.createElement('option');option.value=id;option.textContent=String(id).slice(0,4)+'–'+String(id).slice(4);return option;}));
+ }catch(_){}
+ loadRoster();
+}
 async function loadRoster() {
+    const request=++rosterRequest;
+    const season=document.getElementById("rosterYear").value;
+    document.getElementById("rosterBody").textContent="Loading roster…";
     try {
-        const response = await fetch(`/api/roster/${currentTeamId}`);
+        const response = await hockeyFetch(`/api/roster/${currentTeamId}${season ? "?season="+season : ""}`);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
         
+        if(request!==rosterRequest)return;
         if (data.players) {
             allPlayers = data.players;
+            const selectedOption=document.getElementById('rosterYear').selectedOptions[0];
+            if(selectedOption && data.season) selectedOption.textContent=String(data.season).slice(0,4)+'–'+String(data.season).slice(4)+(data.gameType===1?' · Preseason':'');
             applyFilterAndSort('ALL');
         }
     } catch (error) {
+        if(request!==rosterRequest)return;
         console.error('Error loading roster:', error);
-        showError(`Error loading roster: ${error.message}`);
+        const body = document.getElementById('rosterBody');
+        body.innerHTML = '<div class="empty-state">Roster data is temporarily unavailable. <button id="retryRoster">Retry</button></div>';
+        document.getElementById('retryRoster').onclick = loadRoster;
     }
 }
 
@@ -700,9 +626,7 @@ function displayRoster(players) {
         players.forEach(player => {
             const card = createPlayerCard(player);
             // Navigate to player page on click
-            card.addEventListener('click', function() {
-                window.location.href = `/player/${player.id}`;
-            });
+
             rosterBody.appendChild(card);
         });
         rosterProspectsSection.classList.remove('hidden');
@@ -735,7 +659,8 @@ function createPlayerRow(player) {
 }
 
 function createPlayerCard(player) {
-    const col = document.createElement('div');
+    const col = document.createElement('a');
+    col.href = `/player/${player.id}`;
     col.className = `player-card roster-card position-${player.position}`;
     col.dataset.position = player.position;
 
@@ -745,18 +670,18 @@ function createPlayerCard(player) {
     let statHtml = '';
     if (player.position === 'G') {
         statHtml = `
-            <div class="stat"><span class="label">GP</span><span class="value">${stats.games || 0}</span></div>
-            <div class="stat"><span class="label">W</span><span class="value">${stats.wins || 0}</span></div>
-            <div class="stat"><span class="label">L</span><span class="value">${stats.losses || 0}</span></div>
+            <div class="stat"><span class="label">GP</span><span class="value">${stats.games ?? '–'}</span></div>
+            <div class="stat"><span class="label">W</span><span class="value">${stats.wins ?? '–'}</span></div>
+            <div class="stat"><span class="label">L</span><span class="value">${stats.losses ?? '–'}</span></div>
             <div class="stat"><span class="label">GAA</span><span class="value">${stats.gaa !== undefined ? stats.gaa.toFixed(2) : '-'}</span></div>
             <div class="stat"><span class="label">SV%</span><span class="value">${stats.savePercentage !== undefined ? stats.savePercentage.toFixed(3) : '-'}</span></div>
         `;
     } else {
         statHtml = `
-            <div class="stat"><span class="label">GP</span><span class="value">${stats.games || 0}</span></div>
-            <div class="stat"><span class="label">G</span><span class="value">${stats.goals || 0}</span></div>
-            <div class="stat"><span class="label">A</span><span class="value">${stats.assists || 0}</span></div>
-            <div class="stat"><span class="label">Pts</span><span class="value">${stats.points || 0}</span></div>
+            <div class="stat"><span class="label">GP</span><span class="value">${stats.games ?? '–'}</span></div>
+            <div class="stat"><span class="label">G</span><span class="value">${stats.goals ?? '–'}</span></div>
+            <div class="stat"><span class="label">A</span><span class="value">${stats.assists ?? '–'}</span></div>
+            <div class="stat"><span class="label">Pts</span><span class="value">${stats.points ?? '–'}</span></div>
             <div class="stat"><span class="label">+/-</span><span class="value">${stats.plusMinus !== undefined ? (stats.plusMinus >= 0 ? '+' : '') + stats.plusMinus : '-'}</span></div>
         `;
     }
@@ -804,12 +729,13 @@ function applyFilterAndSort(position) {
     // Determine sort value extractor
     const getSortVal = (p) => {
         const s = p.stats || {};
+        if (!p.stats) return -Infinity;
         switch (rosterSortKey) {
             case 'GOALS': return s.goals || 0;
             case 'ASSISTS': return s.assists || 0;
             case 'GAMES': return s.games || 0;
             case 'SAVE%': return (p.position === 'G') ? (s.savePercentage || 0) : 0;
-            case 'GAA': return (p.position === 'G') ? (s.gaa ? -s.gaa : 0) : 0; // inverse for GAA (lower better)
+            case 'GAA': return p.position === 'G' && s.gaa !== undefined ? -s.gaa : -Infinity; // inverse for GAA (lower better)
             case 'POINTS':
             default: return s.points || 0;
         }
@@ -837,7 +763,7 @@ async function showPlayerModal(playerId) {
     modal.classList.remove('hidden');
 
     try {
-        const resp = await fetch(`/api/player/${playerId}`);
+        const resp = await hockeyFetch(`/api/player/${playerId}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
 
@@ -875,7 +801,7 @@ async function showPlayerModal(playerId) {
                     <h2>${data.firstName || ''} ${data.lastName || ''}</h2>
                     <div class="player-detail-row"><strong>Position:</strong> ${data.position || data.primaryPosition || ''}</div>
                     <div class="player-detail-row"><strong>Team:</strong> ${data.teamCommonName || data.currentTeamAbbrev || ''}</div>
-                    <div class="player-detail-row"><strong>Born:</strong> ${birthDate} ${birthPlace ? ' — ' + birthPlace : ''}</div>
+                    <div class="player-detail-row"><strong>Born:</strong> ${birthDate} ${birthPlace ? ' · ' + birthPlace : ''}</div>
                     <div class="player-detail-row">${data.twitterLink ? `<a href="${data.twitterLink}" target="_blank">@${data.twitterLink.split('/').pop()}</a>` : ''}</div>
                     ${statsHtml}
                 </div>

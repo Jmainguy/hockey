@@ -17,12 +17,12 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="flex w-full sm:w-auto flex-col sm:flex-row gap-2 sm:gap-2">
-                            <button id="scheduleBtn" class="w-full sm:w-auto px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition">📅 Schedule</button>
-                            <button id="coachBtn" class="w-full sm:w-auto px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition">📋 Coach</button>
-                            <button id="triviaBtn" class="w-full sm:w-auto px-4 py-2 bg-accent hover:bg-accent/90 text-gray-900 rounded-lg font-semibold transition">🎯 Trivia</button>
+                        <div class="team-header-actions flex w-full sm:w-auto flex-col sm:flex-row gap-2 sm:gap-2">
+                            <button id="scheduleBtn" class="w-full sm:w-auto px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition"> Schedule</button>
+                            <button id="coachBtn" class="w-full sm:w-auto px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition"> Coach</button>
+                            <button id="triviaBtn" class="w-full sm:w-auto px-4 py-2 bg-accent hover:bg-accent/90 text-gray-900 rounded-lg font-semibold transition"> Trivia</button>
                             <a id="backToTeam" href="#" class="w-full sm:w-auto px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">← Team</a>
-                            <a id="homeBtn" href="/" class="w-full sm:w-auto px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg font-semibold transition">🏠 Home</a>
+                            <a id="homeBtn" href="/" class="w-full sm:w-auto px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg font-semibold transition"> Home</a>
                         </div>
                     </div>
                 </section>
@@ -77,7 +77,7 @@
 
         // Name
         if (teamNameEl) {
-            const title = suffix ? `${team.name} — ${suffix}` : (team.name || 'Team');
+            const title = suffix ? `${team.name} · ${suffix}` : (team.name || 'Team');
             // prefer wordmark in the name area; otherwise fall back to textual title
             if (team.wordmarkUrl) {
                 teamNameEl.innerHTML = '';
@@ -102,44 +102,12 @@
             conferenceEl.textContent = `${team.conference.name}${cr ? ' - ' + cr : ''}`;
         }
 
-        // If ranks are not present, try to compute them asynchronously
-        if ((!team.divisionRank || !team.conferenceRank) && (divisionEl || conferenceEl)) {
-            (async function computeRanks() {
-                try {
-                    const resp = await fetch('/api/teams');
-                    if (!resp.ok) return;
-                    const data = await resp.json();
-                    if (!data.teams || data.teams.length === 0) return;
-
-                    const divisionTeams = data.teams
-                        .filter(t => t.division === team.division.name)
-                        .sort((a, b) => {
-                            if (b.record.points !== a.record.points) return b.record.points - a.record.points;
-                            return b.record.wins - a.record.wins;
-                        });
-                    const divisionRank = divisionTeams.findIndex(t => t.id === team.id) + 1;
-
-                    const conferenceTeams = data.teams
-                        .filter(t => t.conference === team.conference.name)
-                        .sort((a, b) => {
-                            if (b.record.points !== a.record.points) return b.record.points - a.record.points;
-                            return b.record.wins - a.record.wins;
-                        });
-                    const conferenceRank = conferenceTeams.findIndex(t => t.id === team.id) + 1;
-
-                    if (divisionEl) divisionEl.textContent = `${team.division.name} - ${formatRank(divisionRank)}`;
-                    if (conferenceEl) conferenceEl.textContent = `${team.conference.name} - ${formatRank(conferenceRank)}`;
-                } catch (e) {
-                    // ignore
-                }
-            })();
-        }
-
         if (backLink) {
+            backLink.hidden = location.pathname.startsWith('/team/');
             backLink.href = `/team/${(team.abbreviation || team.id || '').toString().toLowerCase()}`;
         }
         const homeBtn = document.getElementById('homeBtn');
-        if (homeBtn) homeBtn.href = '/';
+        if (homeBtn) homeBtn.hidden = true;
 
         if (teamHeader) teamHeader.classList.remove('hidden');
 

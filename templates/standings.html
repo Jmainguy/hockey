@@ -3,40 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NHL Standings - NHL Fan Hub</title>    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">    <link rel="stylesheet" href="/static/style.css">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-    tailwind.config = {
-        theme: {
-            extend: {
-                colors: {
-                    primary: '#0d47a1',
-                    secondary: '#1565c0',
-                    accent: '#ffb300'
-                }
-            }
-        }
-    }
-    </script>
+    <title>NHL Standings - Barnwide</title>    <link rel="icon" href="/static/favicon.ico?v=barnwide" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png?v=barnwide">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png?v=barnwide">    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/utilities.css">
+<link rel="stylesheet" href="/static/design.css">
+<script src="/static/site.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen font-sans">
-    <div class="max-w-7xl mx-auto px-6 py-8">
+<a class="skip-link" href="#mainContent">Skip to content</a>
+<nav class="site-nav" aria-label="Main navigation"><a class="brand" href="/"><img class="brand-arena" src="/static/barnwide-mark.png" width="64" height="44" alt=""><span>Barnwide</span></a><div class="nav-links"><a href="/">Teams</a><a href="/scores">Scores</a><a href="/standings">Standings</a></div></nav>
+<div id="dataStatus" class="data-status hidden" role="status"></div>
+
+    <div id="mainContent" class="max-w-7xl mx-auto px-6 py-8">
         <header class="bg-gradient-to-r from-primary to-secondary text-white rounded-3xl p-10 shadow-xl relative overflow-hidden mb-8">
             <div class="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.25),transparent_60%)]"></div>
                 <div class="relative z-10 flex items-center justify-between flex-wrap gap-4">
                 <div>
-                    <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight flex items-center gap-4"><span>🏒</span> NHL Standings</h1>
-                    <p class="mt-3 text-white/90 text-lg font-medium">Current season standings and rankings</p>
+                    <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight flex items-center gap-4"><span></span> NHL Standings</h1>
+
                 </div>
-                <div class="flex gap-2 items-center">
-                    <a href="/scores" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">Scores</a>
-                    <a href="/" class="px-6 py-3 bg-white/20 hover:bg-white/30 rounded-lg font-semibold transition backdrop-blur-sm">Home</a>
-                </div>
+
             </div>
         </header>
 
+        <div class="season-controls"><label for="seasonSelect">Season <select id="seasonSelect"><option value="">Latest available</option></select></label><div role="group" aria-label="Competition"><button id="preseasonView" aria-pressed="false">Preseason</button><button id="regularView" aria-pressed="true">Regular season</button><button id="playoffView" aria-pressed="false">Playoffs</button></div></div>
+        <section id="playoffViewContent" hidden aria-label="Playoff bracket"><div id="championBanner"></div><div class="bracket-scroll" tabindex="0" aria-label="Playoff tree, scroll horizontally for later rounds"><div id="seasonBracket" class="season-bracket"></div></div></section>
+        <section id="regularViewContent">
         <!-- Filter Buttons -->
-        <div class="mb-2 flex flex-wrap gap-3 items-center">
+        <div class="standings-filters mb-2 flex flex-wrap gap-3 items-center">
             <button id="filterLeague" class="filter-btn active px-6 py-3 rounded-lg font-bold transition shadow-md">League</button>
             <button id="filterEastern" class="filter-btn px-6 py-3 rounded-lg font-bold transition shadow-md">Eastern Conference</button>
             <button id="filterWestern" class="filter-btn px-6 py-3 rounded-lg font-bold transition shadow-md">Western Conference</button>
@@ -46,7 +41,9 @@
             <button id="filterPacific" class="filter-btn px-6 py-3 rounded-lg font-bold transition shadow-md">Pacific</button>
         </div>
 
-        <div id="loading" class="text-center text-gray-500 py-12 text-lg">Loading standings...</div>
+        <p id="standingsSeason" class="season-note" hidden></p>
+<div id="loading" class="text-center text-gray-500 py-12 text-lg">Loading standings...</div>
+        <div id="seasonNotice" class="season-notice" role="status" hidden></div>
         <div id="error" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4"></div>
 
         <!-- Standings Table -->
@@ -81,8 +78,10 @@
                 </div>
             </div>
         </div>
+        </section>
     </div>
 
     <script src="/static/standings.js"></script>
+<script src="/static/season-browser.js"></script>
 </body>
 </html>

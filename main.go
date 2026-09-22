@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -19,7 +20,7 @@ import (
 //go:embed static templates
 var embeddedFiles embed.FS
 
-func main() {
+func newRouter() *mux.Router {
 	router := mux.NewRouter()
 
 	// Static files - serve from embedded FS
@@ -27,9 +28,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	router.PathPrefix("/static/").Handler(
-		http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))),
-	)
+	var assetFS http.FileSystem = http.FS(staticFS)
+	if dir := os.Getenv("FRONTEND_DIST_DIR"); dir != "" {
+		assetFS = http.Dir(dir)
+	}
+	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(assetFS)))
 
 	// Routes
 	router.HandleFunc("/", handleIndex).Methods("GET")
@@ -43,9 +46,13 @@ func main() {
 	router.HandleFunc("/game/{gameId}", handleGamePage).Methods("GET")
 	router.HandleFunc("/playoff-series/{seasonId:[0-9]{8}}/{seriesLetter:[a-zA-Z]}", handlePlayoffSeriesPage).Methods("GET")
 	router.HandleFunc("/api/teams", handleAPITeams).Methods("GET")
+	router.HandleFunc("/api/standings-seasons", handleStandingsSeasons).Methods("GET")
+	router.HandleFunc("/api/standings", handleAPIStandings).Methods("GET")
+	router.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }).Methods("GET")
 	router.HandleFunc("/api/playoff-bracket", handleAPIPlayoffBracket).Methods("GET")
 	router.HandleFunc("/api/schedule/playoff-series/{seasonId:[0-9]{8}}/{seriesLetter:[a-zA-Z]}", handleAPIPlayoffSeriesSchedule).Methods("GET")
 	router.HandleFunc("/api/team/{teamId}", handleAPITeamDetails).Methods("GET")
+	router.HandleFunc("/api/roster-seasons/{teamId}", handleRosterSeasons).Methods("GET")
 	router.HandleFunc("/api/roster/{teamId}", handleAPIRoster).Methods("GET")
 	router.HandleFunc("/api/prospects/{teamAbbrev}", handleAPIProspects).Methods("GET")
 	router.HandleFunc("/api/player/{playerId}", handleAPIPlayer).Methods("GET")
@@ -57,19 +64,31 @@ func main() {
 	router.HandleFunc("/api/team-transactions/{teamId}", handleAPITeamTransactions).Methods("GET")
 	router.HandleFunc("/api/videos/{gameId}", handleAPIVideos).Methods("GET")
 
-	port := "8080"
-	fmt.Printf("Server starting on http://localhost:%s\n", port)
-	if err := http.ListenAndServe(":"+port, router); err != nil {
-		log.Fatal(err)
+	registerDiscoveryRoutes(router)
+	router.Use(responseHeaders)
+	return router
+}
+func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
+	server := &http.Server{Addr: ":" + port, Handler: newRouter(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second, WriteTimeout: 20 * time.Second}
+	log.Printf("Hockey listening on http://localhost:%s", port)
+	log.Fatal(server.ListenAndServe())
 }
 
 func serveEmbeddedFile(w http.ResponseWriter, r *http.Request, filename string) {
 	content, err := embeddedFiles.ReadFile(filepath.Join("templates", filename))
+	if dir := os.Getenv("TEMPLATES_DIR"); dir != "" {
+		content, err = os.ReadFile(filepath.Join(dir, filename))
+	}
 	if err != nil {
 		http.Error(w, "File not found", http.StatusNotFound)
 		return
 	}
+	content = addPageMetadata(content, r)
+	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if _, err := w.Write(content); err != nil {
 		log.Printf("Error writing response: %v", err)
@@ -128,45 +147,94 @@ func handleTeamSchedule(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAPITeams(w http.ResponseWriter, r *http.Request) {
-	teams, err := GetAllTeams()
+	w.Header().Set("Content-Type", "application/json")
+	_ = catalogResponse().WriteJSON(w)
+}
+func handleAPIStandings(w http.ResponseWriter, r *http.Request) {
+	url := BaseURL + "/standings/now"
+	if season := r.URL.Query().Get("season"); season != "" {
+		seasons, err := standingsSeasons(r.Context())
+		if err != nil {
+			dataUnavailable(w)
+			return
+		}
+		found := false
+		for _, item := range seasons.Seasons {
+			if strconv.Itoa(item.ID) == season {
+				if r.URL.Query().Get("phase") == "preseason" {
+					teams, err := getPreseason(r.Context(), item.ID, item.Start, item.End)
+					if err != nil {
+						dataUnavailable(w)
+						return
+					}
+					writeDataHeaders(w, cacheEntry{UpdatedAt: teams.UpdatedAt, FreshUntil: time.Now().Add(time.Minute)})
+					if teams.Stale {
+						w.Header().Set("X-Data-Stale", "true")
+					}
+					w.Header().Set("Content-Type", "application/json")
+					_ = teams.WriteJSON(w)
+					return
+				}
+				if item.Start > seasons.CurrentDate {
+					w.Header().Set("Content-Type", "application/json")
+					_ = (&TeamsResponse{Season: item.ID, RegularSeasonStart: item.Start, Teams: []Team{}}).WriteJSON(w)
+					return
+				}
+				date := item.End
+				if seasons.CurrentDate < date {
+					date = seasons.CurrentDate
+				}
+				url = BaseURL + "/standings/" + date
+				found = true
+				break
+			}
+		}
+		if !found {
+			http.Error(w, "Unknown season", http.StatusBadRequest)
+			return
+		}
+	}
+	e, err := upstream.get(r.Context(), url)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		dataUnavailable(w)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := teams.WriteJSON(w); err != nil {
-		log.Printf("Error writing teams JSON: %v", err)
+	teams, err := parseStandings(e.Data)
+	if err != nil {
+		dataUnavailable(w)
+		return
 	}
+	teams.UpdatedAt = e.UpdatedAt
+	teams.Stale = time.Now().After(e.FreshUntil)
+	writeDataHeaders(w, e)
+	w.Header().Set("Content-Type", "application/json")
+	_ = teams.WriteJSON(w)
 }
 
 func handleAPIPlayoffBracket(w http.ResponseWriter, r *http.Request) {
-	data, err := GetPlayoffBracketJSON()
+	season := r.URL.Query().Get("season")
+	if season == "" {
+		season = fmt.Sprint(currentSeasonID())
+	}
+	start, err := strconv.Atoi(season[:min(4, len(season))])
+	if err != nil || len(season) != 8 || season != fmt.Sprintf("%d%d", start, start+1) || start < 1917 || start > time.Now().Year() {
+		http.Error(w, "Invalid season", 400)
+		return
+	}
+	e, err := upstream.get(r.Context(), fmt.Sprintf("%s/playoff-bracket/%d", BaseURL, start+1))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		dataUnavailable(w)
 		return
 	}
 	var payload map[string]interface{}
-	if err := json.Unmarshal(data, &payload); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		if _, werr := w.Write(data); werr != nil {
-			log.Printf("Error writing playoff bracket JSON: %v", werr)
-		}
+	if json.Unmarshal(e.Data, &payload) != nil {
+		dataUnavailable(w)
 		return
 	}
-	payload["seasonId"] = currentSeasonID()
-	out, err := json.Marshal(payload)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		if _, werr := w.Write(data); werr != nil {
-			log.Printf("Error writing playoff bracket JSON: %v", werr)
-		}
-		return
-	}
+	payload["seasonId"] = season
+	writeDataHeaders(w, e)
 	w.Header().Set("Content-Type", "application/json")
-	if _, err := w.Write(out); err != nil {
-		log.Printf("Error writing playoff bracket JSON: %v", err)
-	}
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 func handleAPIPlayoffSeriesSchedule(w http.ResponseWriter, r *http.Request) {
@@ -206,17 +274,16 @@ func handleAPIRoster(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	teamID := vars["teamId"]
 
-	roster, err := GetRoster(teamID)
+	roster, err := GetRoster(r.Context(), teamID, r.URL.Query().Get("season"))
 	if err != nil {
-		// Distinguish not found vs upstream failure
-		status := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "unknown team id") || strings.Contains(err.Error(), "status 404") || strings.Contains(err.Error(), "upstream status 404") {
-			status = http.StatusNotFound
-		}
-		http.Error(w, err.Error(), status)
+		dataUnavailable(w)
 		return
 	}
 
+	w.Header().Set("X-Data-Updated", roster.UpdatedAt.UTC().Format(time.RFC3339))
+	if roster.Stale {
+		w.Header().Set("X-Data-Stale", "true")
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := roster.WriteJSON(w); err != nil {
 		log.Printf("Error writing roster JSON: %v", err)
@@ -243,85 +310,13 @@ func handleAPIPlayer(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	playerID := vars["playerId"]
 
-	// Construct NHL API URL
-	url := fmt.Sprintf("%s/player/%s/landing", BaseURL, playerID)
-	cacheKey := fmt.Sprintf("player:%s", playerID)
-
-	body, err := fetchURL(url)
+	entry, err := upstream.get(r.Context(), fmt.Sprintf("%s/player/%s/landing", BaseURL, playerID))
 	if err != nil {
-		// Check if it's a 429, and if so, try Redis
-		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
-			log.Printf("Upstream 429 for player %s, trying Redis", playerID)
-			cachedData, cacheErr := getCachedRaw(cacheKey)
-			if cacheErr == nil {
-				log.Printf("Found cached player for %s in Redis", playerID)
-				// Parse the JSON to enrich with team abbreviations
-				var playerData map[string]interface{}
-				if err := json.Unmarshal(cachedData, &playerData); err != nil {
-					// If parsing fails, just return raw data
-					w.Header().Set("Content-Type", "application/json")
-					if _, werr := w.Write(cachedData); werr != nil {
-						log.Printf("Error writing cached response: %v", werr)
-					}
-					return
-				}
-
-				// Enrich seasonTotals with team abbreviations
-				if seasonTotals, ok := playerData["seasonTotals"].([]interface{}); ok {
-					for _, seasonEntry := range seasonTotals {
-						if season, ok := seasonEntry.(map[string]interface{}); ok {
-							// Try to get team name and map to abbreviation
-							if teamNameObj, ok := season["teamName"].(map[string]interface{}); ok {
-								if teamName, ok := teamNameObj["default"].(string); ok {
-									if abbrev, exists := teamNameToAbbr[teamName]; exists {
-										season["teamAbbrev"] = abbrev
-									}
-								}
-							}
-							// Fallback: try teamId if available
-							if teamIDFloat, ok := season["teamId"].(float64); ok {
-								teamID := int(teamIDFloat)
-								if abbrev, exists := teamIDToAbbr[teamID]; exists {
-									season["teamAbbrev"] = abbrev
-								}
-							}
-						}
-					}
-				}
-
-				// Return enriched cached data
-				enrichedData, err := json.Marshal(playerData)
-				if err != nil {
-					// If marshaling fails, return original cached data
-					w.Header().Set("Content-Type", "application/json")
-					if _, werr := w.Write(cachedData); werr != nil {
-						log.Printf("Error writing cached response: %v", werr)
-					}
-					return
-				}
-
-				w.Header().Set("Content-Type", "application/json")
-				if _, err := w.Write(enrichedData); err != nil {
-					log.Printf("Error writing enriched cached data: %v", err)
-				}
-				return
-			}
-			log.Printf("No cached player for %s in Redis: %v", playerID, cacheErr)
-		}
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		dataUnavailable(w)
 		return
 	}
-	defer func() {
-		if err := body.Close(); err != nil {
-			log.Printf("Error closing response body: %v", err)
-		}
-	}()
-
-	data, err := io.ReadAll(body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
+	writeDataHeaders(w, entry)
+	data := []byte(entry.Data)
 
 	// Parse the JSON to enrich with team abbreviations
 	var playerData map[string]interface{}
@@ -373,10 +368,6 @@ func handleAPIPlayer(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error writing enriched data: %v", err)
 	}
 
-	// Cache the successful response in Redis (use enriched data)
-	if setErr := setCachedRaw(cacheKey, enrichedData, time.Hour); setErr != nil {
-		log.Printf("Failed to cache player for %s: %v", playerID, setErr)
-	}
 }
 
 func handleAPIPlayerBio(w http.ResponseWriter, r *http.Request) {
@@ -387,7 +378,7 @@ func handleAPIPlayerBio(w http.ResponseWriter, r *http.Request) {
 	url := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-us/players?tags.slug=playerid-%s", playerID)
 	cacheKey := fmt.Sprintf("player-bio:%s", playerID)
 
-	body, err := fetchURL(url)
+	body, err := fetchURLContext(r.Context(), url)
 	if err != nil {
 		// Check if it's a 429, and if so, try Redis
 		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
@@ -431,87 +422,34 @@ func handleAPIPlayerBio(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAPISchedule(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	date := vars["date"]
-
-	// Construct NHL API URL for schedule
-	url := fmt.Sprintf("%s/schedule/%s", BaseURL, date)
-	cacheKey := fmt.Sprintf("schedule:%s", date)
-
-	body, err := fetchURL(url)
+	date := mux.Vars(r)["date"]
+	if _, err := time.Parse("2006-01-02", date); err != nil {
+		http.Error(w, "Invalid date", http.StatusBadRequest)
+		return
+	}
+	entry, err := upstream.get(r.Context(), BaseURL+"/schedule/"+date)
 	if err != nil {
-		// Check if it's a 429, and if so, try Redis
-		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
-			log.Printf("Upstream 429 for schedule %s, trying Redis", date)
-			cachedData, cacheErr := getCachedRaw(cacheKey)
-			if cacheErr == nil {
-				log.Printf("Found cached schedule for %s in Redis", date)
-				w.Header().Set("Content-Type", "application/json")
-				if _, writeErr := w.Write(cachedData); writeErr != nil {
-					log.Printf("Error writing cached schedule response: %v", writeErr)
-				}
-				return
-			}
-			log.Printf("No cached schedule for %s in Redis: %v", date, cacheErr)
-		}
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		dataUnavailable(w)
 		return
 	}
-	defer func() {
-		if err := body.Close(); err != nil {
-			log.Printf("Error closing response body: %v", err)
-		}
-	}()
-
-	data, err := io.ReadAll(body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if _, err := w.Write(data); err != nil {
-		log.Printf("Error writing schedule data: %v", err)
-		return
-	}
-
-	// Cache the successful response in Redis
-	if setErr := setCachedRaw(cacheKey, data, time.Hour); setErr != nil {
-		log.Printf("Failed to cache schedule for %s: %v", date, setErr)
-	}
+	writeDataHeaders(w, entry)
+	_, _ = w.Write(entry.Data)
 }
 
 func handleAPIGameLanding(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	gameID := vars["gameId"]
 
-	// Construct NHL API URL for game landing
-	// Use typed fetcher so we can enrich the payload reliably
-	landing, err := GetGameLanding(gameID)
+	entry, err := upstream.get(r.Context(), fmt.Sprintf("%s/gamecenter/%s/landing", BaseURL, gameID))
 	if err != nil {
-		// Typed fetch failed (likely due to non-standard payload for international games).
-		// Continue and fetch the raw payload below so we can still enrich it for the
-		// frontend (attach team branding, empty discreteClips/clockText when unavailable).
-		log.Printf("Typed GetGameLanding failed for %s: %v — will enrich raw payload instead", gameID, err)
+		dataUnavailable(w)
+		return
+	}
+	writeDataHeaders(w, entry)
+	rawData := []byte(entry.Data)
+	landing := &GameLanding{}
+	if json.Unmarshal(rawData, landing) != nil {
 		landing = nil
-	}
-
-	// Read raw landing again to preserve original payload structure while enriching
-	url := fmt.Sprintf("%s/gamecenter/%s/landing", BaseURL, gameID)
-	body, err := fetchURL(url)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	defer func() {
-		if err := body.Close(); err != nil {
-			log.Printf("Error closing response body: %v", err)
-		}
-	}()
-	rawData, err := io.ReadAll(body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
 	}
 
 	// Unmarshal to a generic map so we can add fields
@@ -614,7 +552,7 @@ func handleAPITeamSchedule(w http.ResponseWriter, r *http.Request) {
 		cacheKey = fmt.Sprintf("team-schedule:%s:now", teamAbbrev)
 	}
 
-	body, err := fetchURL(url)
+	body, err := fetchURLContext(r.Context(), url)
 	if err != nil {
 		// Check if it's a 429, and if so, try Redis
 		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
@@ -754,7 +692,7 @@ func handleAPIVideos(w http.ResponseWriter, r *http.Request) {
 	url := fmt.Sprintf("https://forge-dapi.d3.nhle.com/v2/content/en-US/videos?$limit=100&tags.slug=gameid-%s", gameID)
 	cacheKey := fmt.Sprintf("videos:%s", gameID)
 
-	body, err := fetchURL(url)
+	body, err := fetchURLContext(r.Context(), url)
 	if err != nil {
 		// Check if it's a 429, and if so, try Redis
 		if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
