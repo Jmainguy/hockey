@@ -279,9 +279,9 @@ func TestRosterSelectedSeasonUsesMatchingRosterAndStats(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/roster/bos/20232024":
-			w.Write([]byte(`{"forwards":[{"id":1}],"defensemen":[],"goalies":[]}`))
+			_, _ = w.Write([]byte(`{"forwards":[{"id":1}],"defensemen":[],"goalies":[]}`))
 		case "/club-stats/BOS/20232024/2":
-			w.Write([]byte(`{"season":"20232024","skaters":[{"playerId":1,"gamesPlayed":82,"points":67}]}`))
+			_, _ = w.Write([]byte(`{"season":"20232024","skaters":[{"playerId":1,"gamesPlayed":82,"points":67}]}`))
 		default:
 			t.Errorf("wrong season resource: %s", r.URL.Path)
 			w.WriteHeader(404)
