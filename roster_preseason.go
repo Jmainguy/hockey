@@ -63,7 +63,9 @@ func preseasonPlayerStats(ctx context.Context, abbr, season string, players []Pl
 		}
 		for _, p := range append(append(group.Forwards, group.Defense...), group.Goalies...) {
 			var m, s int
-			fmt.Sscanf(p.TOI, "%d:%d", &m, &s)
+			if _, err := fmt.Sscanf(p.TOI, "%d:%d", &m, &s); err != nil {
+				continue
+			}
 			if m*60+s == 0 {
 				continue
 			}

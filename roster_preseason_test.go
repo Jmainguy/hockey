@@ -12,13 +12,13 @@ func TestPreseasonBoxscoreStats(t *testing.T) {
 	defer func() { upstream = old; BaseURL = base }()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/club-schedule-season/BOS/20262027" {
-			w.Write([]byte(`{"games":[{"id":1,"gameType":1,"gameState":"FINAL","homeTeam":{"abbrev":"BOS"}},{"id":1,"gameType":1,"gameState":"FINAL","homeTeam":{"abbrev":"BOS"}},{"id":2,"gameType":1,"gameState":"LIVE"}]}`))
+			_, _ = w.Write([]byte(`{"games":[{"id":1,"gameType":1,"gameState":"FINAL","homeTeam":{"abbrev":"BOS"}},{"id":1,"gameType":1,"gameState":"FINAL","homeTeam":{"abbrev":"BOS"}},{"id":2,"gameType":1,"gameState":"LIVE"}]}`))
 			return
 		}
 		if r.URL.Path != "/gamecenter/1/boxscore" {
 			t.Errorf("unexpected call %s", r.URL.Path)
 		}
-		w.Write([]byte(`{"id":1,"playerByGameStats":{"homeTeam":{"forwards":[{"playerId":7,"toi":"12:10","goals":1,"assists":2,"points":3}],"goalies":[{"playerId":8,"toi":"30:00","saves":9,"shotsAgainst":10,"goalsAgainst":1,"decision":"W"},{"playerId":9,"toi":"00:00"}]}}}`))
+		_, _ = w.Write([]byte(`{"id":1,"playerByGameStats":{"homeTeam":{"forwards":[{"playerId":7,"toi":"12:10","goals":1,"assists":2,"points":3}],"goalies":[{"playerId":8,"toi":"30:00","saves":9,"shotsAgainst":10,"goalsAgainst":1,"decision":"W"},{"playerId":9,"toi":"00:00"}]}}}`))
 	}))
 	defer srv.Close()
 	upstream = testClient()

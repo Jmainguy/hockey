@@ -25,8 +25,8 @@ func TestRedisSharesSnapshotsAndDeduplicatesReplicas(t *testing.T) {
 	a, b := testClient(), testClient()
 	a.redis = redis.NewClient(&redis.Options{Addr: db.Addr()})
 	b.redis = redis.NewClient(&redis.Options{Addr: db.Addr()})
-	defer a.redis.Close()
-	defer b.redis.Close()
+	defer func() { _ = a.redis.Close() }()
+	defer func() { _ = b.redis.Close() }()
 	var wg sync.WaitGroup
 	for _, c := range []*upstreamClient{a, b} {
 		wg.Add(1)
@@ -62,8 +62,8 @@ func TestRedisCooldownAppliesAcrossReplicas(t *testing.T) {
 	a, b := testClient(), testClient()
 	a.redis = redis.NewClient(&redis.Options{Addr: db.Addr()})
 	b.redis = redis.NewClient(&redis.Options{Addr: db.Addr()})
-	defer a.redis.Close()
-	defer b.redis.Close()
+	defer func() { _ = a.redis.Close() }()
+	defer func() { _ = b.redis.Close() }()
 	_, _ = a.get(context.Background(), server.URL+"/first")
 	_, _ = b.get(context.Background(), server.URL+"/second")
 	if calls.Load() != 1 {
@@ -74,7 +74,7 @@ func TestRedisLeaseCannotBeDeletedByPreviousOwner(t *testing.T) {
 	db := miniredis.RunT(t)
 	c := testClient()
 	c.redis = redis.NewClient(&redis.Options{Addr: db.Addr()})
-	defer c.redis.Close()
+	defer func() { _ = c.redis.Close() }()
 	started := make(chan struct{})
 	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { close(started); <-release; _, _ = w.Write([]byte(`{}`)) }))
@@ -83,7 +83,9 @@ func TestRedisLeaseCannotBeDeletedByPreviousOwner(t *testing.T) {
 	go func() { _, _ = c.get(context.Background(), server.URL); close(done) }()
 	<-started
 	key := redisKey(server.URL) + ":lock"
-	db.Set(key, "new-owner")
+	if err := db.Set(key, "new-owner"); err != nil {
+		t.Fatal(err)
+	}
 	close(release)
 	<-done
 	if owner, _ := db.Get(key); owner != "new-owner" {

@@ -28,7 +28,7 @@ func newRouter() *mux.Router {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var assetFS http.FileSystem = http.FS(staticFS)
+	assetFS := http.FS(staticFS)
 	if dir := os.Getenv("FRONTEND_DIST_DIR"); dir != "" {
 		assetFS = http.Dir(dir)
 	}

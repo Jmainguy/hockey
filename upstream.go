@@ -239,7 +239,7 @@ func (c *upstreamClient) fetch(ctx context.Context, url string) (cacheEntry, err
 	if err != nil {
 		return cacheEntry{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == 429 || resp.StatusCode == 503 {
 		delay := time.Minute
 		if secs, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && secs > 0 {

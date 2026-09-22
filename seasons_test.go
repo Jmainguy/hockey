@@ -15,11 +15,11 @@ func TestHistoricalSeasonRouting(t *testing.T) {
 		dates = append(dates, r.URL.Path)
 		switch r.URL.Path {
 		case "/standings-season":
-			w.Write([]byte(`{"currentDate":"2026-04-17","seasons":[{"id":20242025,"standingsEnd":"2025-04-17","standingsStart":"2024-10-01"},{"id":20262027,"standingsEnd":"2027-04-17","standingsStart":"2026-10-01"}]}`))
+			_, _ = w.Write([]byte(`{"currentDate":"2026-04-17","seasons":[{"id":20242025,"standingsEnd":"2025-04-17","standingsStart":"2024-10-01"},{"id":20262027,"standingsEnd":"2027-04-17","standingsStart":"2026-10-01"}]}`))
 		case "/standings/2025-04-17":
-			w.Write([]byte(`{"standings":[{"seasonId":20242025,"teamName":{"default":"Florida Panthers"},"teamAbbrev":{"default":"FLA"},"points":98}]}`))
+			_, _ = w.Write([]byte(`{"standings":[{"seasonId":20242025,"teamName":{"default":"Florida Panthers"},"teamAbbrev":{"default":"FLA"},"points":98}]}`))
 		case "/playoff-bracket/2025":
-			w.Write([]byte(`{"series":[{"playoffRound":4,"winningTeamId":13}]}`))
+			_, _ = w.Write([]byte(`{"series":[{"playoffRound":4,"winningTeamId":13}]}`))
 		default:
 			t.Errorf("unexpected fetch %s", r.URL.Path)
 			w.WriteHeader(404)
