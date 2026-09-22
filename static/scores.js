@@ -20,7 +20,7 @@ function createGameCard(game) {
     card.href = `/game/${game.id}?from=schedule&date=${formatDate(currentDate)}`;
     const finalOrLive=['OFF','FINAL','LIVE','CRIT'].includes(game.gameState);
     const side = (team,label) => `<div class="score-team"><img src="${escapeHTML(team.logo || `https://assets.nhle.com/logos/nhl/svg/${team.abbrev}_light.svg`)}" alt=""><span>${escapeHTML(team.placeName?.default || team.abbrev)} ${escapeHTML(team.commonName?.default || '')}<small class="block text-gray-500 font-normal text-xs">${label}</small></span><strong>${finalOrLive ? (team.score ?? '–') : '–'}</strong></div>`;
-    card.innerHTML = `<div class="score-state ${['LIVE','CRIT'].includes(game.gameState)?'live-label':''}">${escapeHTML(gameStatus(game))}<small>${game.gameType===1?'Preseason':game.gameType===3?'Playoffs':'Regular season'}</small></div>${side(game.awayTeam || {},'Away')}${side(game.homeTeam || {},'Home')}<div class="score-venue">${escapeHTML(game.venue?.default || '')}</div><span aria-hidden="true">→</span>`;
+    card.innerHTML = `<div class="score-state ${['LIVE','CRIT'].includes(game.gameState)?'live-label':''}">${escapeHTML(gameStatus(game))}<small>${game.gameType===1?'Preseason':game.gameType===3?'Playoffs':'Regular season'}</small></div>${side(game.homeTeam || {},'Home')}${side(game.awayTeam || {},'Away')}<div class="score-venue">${escapeHTML(game.venue?.default || '')}</div><span aria-hidden="true">→</span>`;
     card.querySelectorAll('img').forEach(img=>{img.onerror=()=>{img.style.visibility='hidden';};});
     return card;
 }
@@ -49,7 +49,6 @@ async function loadGames(background = false) {
     } catch(error) {
         if(request!==scoresRequest)return;
         const root=document.getElementById('error');root.textContent='Scores are temporarily unavailable. Please try again shortly.';root.classList.remove('hidden');
-        const retry=document.createElement('button');retry.textContent='Retry';retry.onclick=()=>loadGames();root.append(retry);
     } finally {if(request===scoresRequest)document.getElementById('loading').classList.add('hidden');}
 }
 document.addEventListener('DOMContentLoaded',()=>{

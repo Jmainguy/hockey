@@ -74,5 +74,5 @@ async function loadSeasonBracket(season) {
         if(request!==bracketRequest)return;
         if(!data.series?.length){root.textContent='No playoff bracket is available for this season.';return;}
         renderSeasonBracket(data);
-    }catch(_){if(request===bracketRequest){root.innerHTML='Playoff results are unavailable. <button type="button" id="retryBracket">Retry</button>';document.getElementById('retryBracket').onclick=()=>loadSeasonBracket(season);}}
+    }catch(_){if(request===bracketRequest){root.innerHTML='Playoff results are unavailable.';}}
 }

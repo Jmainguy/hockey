@@ -611,8 +611,7 @@ async function loadRoster() {
         if(request!==rosterRequest)return;
         console.error('Error loading roster:', error);
         const body = document.getElementById('rosterBody');
-        body.innerHTML = '<div class="empty-state">Roster data is temporarily unavailable. <button id="retryRoster">Retry</button></div>';
-        document.getElementById('retryRoster').onclick = loadRoster;
+        body.innerHTML = '<div class="empty-state">Roster data is temporarily unavailable.</div>';
     }
 }
 

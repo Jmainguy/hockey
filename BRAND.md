@@ -18,9 +18,9 @@ never competes with scores.
 - No gradient banners, emoji headings, glass effects, floating cards, or glows.
 - Strong visible focus, 44px touch controls, readable mobile tables.
 - Honest season/date labels. Missing statistics use an em dash glyph, never a
-  fabricated zero. Cached data stays usable with a visible freshness message.
+  fabricated zero. Cached data stays usable; freshness diagnostics stay in console logs.
 
 Core navigation: Teams, Scores, Standings. Team pages add Schedule, Coach, Trivia.
 Use real NHL team logos. The masthead uses the approved metallic BW arena logo with plain Barnwide text. Favicons use the arena symbol alone. Masters: `design/logo/barnwide-mark-hd-v5.png` and `design/logo/barnwide-wordmark-hd-v1.png`. The generated wordmark is retained as a design asset, not used in the navigation. Web derivatives: `static/barnwide-mark.png` and `static/barnwide-wordmark.png`.
 
-Keep page copy minimal: no slogans, decorative counts, repeated navigation, or routine success banners. Preserve useful empty states, season context, and stale-data notices.
+Keep page copy minimal: no slogans, decorative counts, repeated navigation, or routine success banners. Preserve useful empty states, season context, and meaningful unavailable states. Do not show fetch timestamps or retry buttons.

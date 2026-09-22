@@ -26,17 +26,8 @@ async function hockeyFetch(url, options = {}) {
     }
 }
 function showDataStatus() {
-    const root = document.getElementById('dataStatus');
-    if (!root) return;
-    root.replaceChildren();
-    root.classList.add('hidden');
-    if (!dataFailure && !staleData) return;
-    const message = document.createElement('span');
-    message.textContent = dataFailure ? 'Some data is temporarily unavailable.' : staleData ? 'Showing saved data.' : 'Data updated';
-    if (oldestUpdate) message.textContent += ` Updated ${new Date(oldestUpdate).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}.`;
-    if (!dataFailure && !staleData && !oldestUpdate) return;
-    root.classList.remove('hidden');root.append(message);
-    if (dataFailure || staleData) {const retry=document.createElement('button');retry.textContent='Retry';retry.onclick=()=>location.reload();root.append(retry);}
+    // Cache diagnostics belong in developer tools, not the browsing experience.
+    console.debug('[Barnwide data]', {unavailable: dataFailure, stale: staleData, updated: oldestUpdate});
 }
 function escapeHTML(value) {
     return String(value ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

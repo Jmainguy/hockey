@@ -82,3 +82,11 @@ header[class]{background:none!important;background-image:none!important;color:va
 @media(max-width:380px){.brand{gap:5px}}
 
 .directory-tools>input{width:min(100%,420px)}
+
+/* Explicit foregrounds keep unlayered base styles from overriding utility colors. */
+a.bg-primary,button.bg-primary,a.bg-accent,button.bg-accent{background:#316e8c!important;color:#fff!important}
+a.bg-primary:hover,button.bg-primary:hover,a.bg-accent:hover,button.bg-accent:hover{background:#275c76!important;color:#fff!important}
+[class*="bg-gradient"].text-white{color:var(--ink)!important}
+[class*="bg-gradient"] .text-white:not(a):not(button){color:var(--ink)!important}
+#teamHeader button,#teamHeader a{background:#fff!important;color:#31627c!important}
+#teamHeader button:hover,#teamHeader a:hover{background:#edf5f9!important;color:#245b77!important}

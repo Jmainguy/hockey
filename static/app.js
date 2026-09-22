@@ -152,6 +152,5 @@ async function loadTeams() {
         render();
     } catch (error) {
         loading.textContent = 'Teams could not be loaded. Please try again.';
-        const button = document.createElement('button'); button.textContent = 'Retry'; button.onclick = loadTeams; loading.append(button);
     }
 }
