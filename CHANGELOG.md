@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.14.0](https://github.com/Jmainguy/hockey/compare/v1.13.0...v1.14.0) (2026-09-22)
+
+
+### Features
+
+* launch barnwide with resilient feeds and historical seasons ([9ab9fd8](https://github.com/Jmainguy/hockey/commit/9ab9fd8d1290f49a8b58494c64563a31a74ad618))
+
+
+### Bug Fixes
+
+* address release lint checks and malformed ice time ([3c820f9](https://github.com/Jmainguy/hockey/commit/3c820f9f0a2fbcb5afbbf958217525d502e7a5b2))
+* **build:** retain redis test dependencies after upstream merge ([142e52b](https://github.com/Jmainguy/hockey/commit/142e52b8a7f7210c8e6f62dd5e4d447ee1e620a1))
+
 ## [1.13.0](https://github.com/Jmainguy/hockey/compare/v1.12.1...v1.13.0) (2026-08-23)
 
 
