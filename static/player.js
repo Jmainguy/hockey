@@ -81,6 +81,8 @@ async function loadPlayer() {
 
         // Load biography in the background
         loadPlayerBio(id);
+        loadPlayerInterviews(id);
+        loadPlayerPhotos(id);
 
         // Helper to safely extract string values from nested structures
         const resolve = (val) => {
@@ -772,13 +774,13 @@ async function loadPlayer() {
         }
         // Hide season filters until Seasons tab selected
         const filtersRoot = document.getElementById('seasonFilters');
-        if (filtersRoot) filtersRoot.classList.add('hidden');
+        if (filtersRoot) filtersRoot.style.display = 'none';
         const nav = document.getElementById('playerStickyNav');
         if (nav && filtersRoot) {
             nav.querySelectorAll('button').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const activeTab = btn.dataset.target;
-                    filtersRoot.classList.toggle('hidden', activeTab !== 'seasons');
+                    filtersRoot.style.display = activeTab === 'seasons' ? '' : 'none';
                 });
             });
         }
@@ -828,6 +830,111 @@ async function loadPlayerBio(playerId) {
         bioDiv.innerHTML = '<div class="text-center text-gray-500 py-6">Failed to load biography</div>';
     }
 }
+
+function playerMediaImage(image, size = 20, ratio = '4_3') {
+    const raw = image?.templateUrl?.replace('{formatInstructions}', `t_ratio${ratio}-size${size}`) || image?.thumbnailUrl || '';
+    try {
+        const url = new URL(raw);
+        return url.protocol === 'https:' && url.hostname === 'media.d3.nhle.com' ? url.href : '';
+    } catch (_) { return ''; }
+}
+
+function isPlayerInterview(item) {
+    const title = (item.title || item.fields?.headline || '').toLowerCase();
+    const tags = (item.tags || []).map(tag => (tag.slug || '').toLowerCase());
+    return tags.includes('locker-room') || tags.some(tag => tag.includes('interview')) ||
+        /(?:^|\W)(?:pre-raw|post-raw|raw|interview|media availability|press conference|scrum)(?:\W|$)/.test(title);
+}
+
+async function loadPlayerInterviews(playerId) {
+    const root = document.getElementById('playerInterviews');
+    try {
+        const data = await (await hockeyFetch(`/api/player-media/${playerId}/videos`)).json();
+        const items = (data.items || []).filter(isPlayerInterview)
+            .filter(item => item.slug && item.fields?.brightcoveId)
+            .sort((a, b) => String(b.contentDate || '').localeCompare(String(a.contentDate || ''))).slice(0, 6);
+        root.replaceChildren();
+        if (!items.length) { root.textContent = 'No recent interviews available.'; return; }
+        root.className = 'grid grid-cols-1 sm:grid-cols-2 gap-4';
+        for (const item of items) {
+            const link = document.createElement('a');
+            link.href = `https://www.nhl.com/video/${encodeURIComponent(item.slug)}`;
+            link.target = '_blank'; link.rel = 'noopener noreferrer';
+            link.className = 'block rounded-lg border border-gray-200 overflow-hidden hover:ring-2 hover:ring-accent';
+            const image = playerMediaImage(item.thumbnail, 20, '16_9');
+            if (image) {
+                const img = document.createElement('img');
+                img.src = image; img.alt = ''; img.loading = 'lazy';
+                img.className = 'w-full object-contain bg-gray-100';
+                img.style.aspectRatio = '16 / 9';
+                link.append(img);
+            }
+            const label = document.createElement('div');
+            label.className = 'p-3';
+            const title = document.createElement('strong'); title.textContent = item.fields?.headline || item.title || 'Interview';
+            const date = document.createElement('small');
+            date.className = 'block text-gray-500 mt-1';
+            if (item.contentDate) date.textContent = new Date(item.contentDate).toLocaleDateString();
+            label.append(title, date); link.append(label); root.append(link);
+        }
+    } catch (_) { root.textContent = 'Interviews are temporarily unavailable.'; }
+}
+
+const playerPhotoItems = [];
+let playerPhotoIndex = 0;
+function showPlayerPhoto(index) {
+    playerPhotoIndex = (index + playerPhotoItems.length) % playerPhotoItems.length;
+    const item = playerPhotoItems[playerPhotoIndex];
+    const image = document.getElementById('playerPhotoLarge');
+    image.src = playerMediaImage(item.image, 50);
+    image.alt = item.fields?.altText || item.fields?.headline || item.title || 'Player photo';
+    document.getElementById('playerPhotoCaption').textContent =
+        [item.fields?.headline || item.title, item.fields?.credit ? `Photo: ${item.fields.credit}` : ''].filter(Boolean).join(' · ');
+    const assetId = item.image?.templateUrl?.match(/\/prd\/([a-z0-9]+)(?:$|\?)/i)?.[1];
+    document.getElementById('playerPhotoDownloads').classList.toggle('hidden', !assetId);
+    if (assetId) {
+        for (const link of document.querySelectorAll('#playerPhotoDownloads a[data-size]')) {
+            link.href = `/api/player-photo/${assetId}?size=${link.dataset.size}`;
+            link.download = `player-photo-${assetId}-${link.dataset.size}.jpg`;
+        }
+    }
+    const dialog = document.getElementById('playerPhotoDialog');
+    if (!dialog.open) dialog.showModal();
+}
+
+async function loadPlayerPhotos(playerId, skip = 0) {
+    const root = document.getElementById('playerPhotos');
+    const more = document.getElementById('playerMorePhotos');
+    more.disabled = true;
+    try {
+        const data = await (await hockeyFetch(`/api/player-media/${playerId}/photos?skip=${skip}`)).json();
+        if (skip === 0) { root.replaceChildren(); playerPhotoItems.length = 0; }
+        for (const item of data.items || []) {
+            const image = playerMediaImage(item.image);
+            if (!image) continue;
+            const index = playerPhotoItems.push(item) - 1;
+            const button = document.createElement('button');
+            button.type = 'button'; button.className = 'rounded-lg overflow-hidden border border-gray-200';
+            button.setAttribute('aria-label', `View photo: ${item.fields?.altText || item.fields?.headline || item.title || `Photo ${index + 1}`}`);
+            const img = document.createElement('img'); img.src = image; img.alt = ''; img.loading = 'lazy';
+            img.className = 'w-full object-contain bg-gray-100';
+            img.style.aspectRatio = '4 / 3';
+            button.append(img); button.addEventListener('click', () => showPlayerPhoto(index)); root.append(button);
+        }
+        if (!playerPhotoItems.length) root.textContent = 'No photos available.';
+        more.classList.toggle('hidden', !data.pagination?.nextUrl || skip >= 240);
+        more.onclick = () => loadPlayerPhotos(playerId, skip + 24);
+    } catch (_) { if (!skip) root.textContent = 'Photos are temporarily unavailable.'; }
+    finally { more.disabled = false; }
+}
+
+document.getElementById('playerPhotoClose')?.addEventListener('click', () => document.getElementById('playerPhotoDialog').close());
+document.getElementById('playerPhotoPrev')?.addEventListener('click', () => showPlayerPhoto(playerPhotoIndex - 1));
+document.getElementById('playerPhotoNext')?.addEventListener('click', () => showPlayerPhoto(playerPhotoIndex + 1));
+document.getElementById('playerPhotoDialog')?.addEventListener('keydown', event => {
+    if (event.key === 'ArrowLeft') showPlayerPhoto(playerPhotoIndex - 1);
+    if (event.key === 'ArrowRight') showPlayerPhoto(playerPhotoIndex + 1);
+});
 
 function formatBiography(bio) {
     if (!bio) return '';

@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     for (const [id, view] of [['preseasonView','preseason'],['regularView','regular'],['playoffView','playoffs']]) {
         document.getElementById(id).addEventListener('click', () => {seasonView=view; loadSeasonView();});
     }
+    // Show the latest standings while the optional season list loads.
+    loadStandings();
     try {
         const data = await (await hockeyFetch('/api/standings-seasons')).json();
         // Modern standings use the current W/L/OT format; earlier eras used ties.
@@ -16,7 +18,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         availableSeasons=seasons;
         select.replaceChildren(...seasons.map(s=>{const option=document.createElement('option');option.value=s.id;option.textContent=seasonLabel(s.id);return option;}));
     } catch (_) { /* Latest standings remain usable if season discovery fails. */ }
-    defaultSeasonView();
+    if (availableSeasons[0]?.defaultView === 'preseason') defaultSeasonView();
 });
 function loadSeasonView() {
     const season=document.getElementById('seasonSelect').value;

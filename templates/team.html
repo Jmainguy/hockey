@@ -51,13 +51,14 @@
                 </div>
             </section>
 
-            <!-- Tabs for News, Transactions, Roster, Prospects -->
+            <!-- Team sections -->
             <div class="bg-white rounded-2xl shadow-md p-6" id="rosterProspectsSection">
                 <div class="flex flex-col sm:flex-row gap-3 border-b border-gray-200 mb-6">
                     <button id="newsTab" class="tab-btn w-full sm:w-auto px-4 py-3 font-bold text-lg border-b-4 border-transparent text-gray-500 hover:text-gray-700 transition text-left">News</button>
                     <button id="transactionsTab" class="tab-btn w-full sm:w-auto px-4 py-3 font-bold text-lg border-b-4 border-transparent text-gray-500 hover:text-gray-700 transition text-left">Transactions</button>
                     <button id="rosterTab" class="tab-btn w-full sm:w-auto px-4 py-3 font-bold text-lg border-b-4 border-primary text-primary transition text-left">Team Roster</button>
                     <button id="prospectsTab" class="tab-btn w-full sm:w-auto px-4 py-3 font-bold text-lg border-b-4 border-transparent text-gray-500 hover:text-gray-700 transition text-left">Prospects</button>
+                    <button id="mediaTab" class="tab-btn w-full sm:w-auto px-4 py-3 font-bold text-lg border-b-4 border-transparent text-gray-500 hover:text-gray-700 transition text-left">Media</button>
                 </div>
 
                 <!-- News Section -->
@@ -103,6 +104,17 @@
                     <div id="prospectsError" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4"></div>
                     <div class="roster-grid roster-section" id="prospectsBody"></div>
                 </div>
+                <div id="mediaContent" class="tab-content hidden">
+                    <section aria-labelledby="teamInterviewsTitle">
+                        <h3 id="teamInterviewsTitle" class="text-xl font-bold text-gray-800 mb-4">Recent player interviews</h3>
+                        <div id="teamInterviews" aria-live="polite">Loading interviews…</div>
+                    </section>
+                    <section class="mt-8" aria-labelledby="teamPhotosTitle">
+                        <h3 id="teamPhotosTitle" class="text-xl font-bold text-gray-800 mb-4">Player photos</h3>
+                        <div id="teamPhotos" class="grid grid-cols-2 sm:grid-cols-3 gap-3" aria-live="polite">Loading photos…</div>
+                        <button id="teamMorePhotos" type="button" class="hidden mt-4 px-4 py-2 rounded-lg bg-primary text-white">Load more photos</button>
+                    </section>
+                </div>
             </div>
 
             <!-- Player Modal -->
@@ -117,8 +129,22 @@
         </div>
     </div>
 
+    <dialog id="teamPhotoDialog" class="rounded-xl p-4 max-w-4xl w-full" aria-label="Team photo viewer">
+        <div class="flex justify-end"><button id="teamPhotoClose" type="button" aria-label="Close photo viewer" class="px-3 py-1 font-bold">Close</button></div>
+        <img id="teamPhotoLarge" alt="" class="w-full max-h-[75vh] object-contain">
+        <p id="teamPhotoCaption" class="text-center text-sm mt-2"></p>
+        <div id="teamPhotoDownloads" class="flex flex-wrap justify-center gap-2 mt-3" aria-label="Download photo sizes">
+            <a data-size="20" class="px-3 py-2 rounded-lg border border-gray-300" href="#">Download 416 × 312</a>
+            <a data-size="40" class="px-3 py-2 rounded-lg border border-gray-300" href="#">Download 832 × 624</a>
+            <a data-size="50" class="px-3 py-2 rounded-lg border border-gray-300" href="#">Download 1280 × 960</a>
+            <a data-size="60" class="px-3 py-2 rounded-lg border border-gray-300" href="#">Download 1920 × 1440</a>
+        </div>
+        <div class="flex justify-between mt-3"><button id="teamPhotoPrev" type="button" class="px-4 py-2 rounded-lg bg-primary text-white">Previous</button><button id="teamPhotoNext" type="button" class="px-4 py-2 rounded-lg bg-primary text-white">Next</button></div>
+    </dialog>
+
     <script src="/static/team-header.js"></script>
     <script src="/static/team.js"></script>
+    <script src="/static/team-media.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </body>
 </html>

@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-function element(){return {textContent:'',innerHTML:'',dataset:{},addEventListener(){},classList:{add(){},remove(){},toggle(){}},replaceChildren(...children){this.children=children},append(){},querySelectorAll(){return []}};}
+function element(){return {textContent:'',innerHTML:'',dataset:{},style:{},addEventListener(){},classList:{add(){},remove(){},toggle(){}},replaceChildren(...children){this.children=children},append(){},querySelectorAll(){return []}};}
 function scope(){const elements=new Map();return {console,URLSearchParams,URL,Date,AbortController,setTimeout,clearTimeout,escapeHTML:s=>String(s??''),document:{hidden:false,addEventListener(){},createElement:element,getElementById(id){if(!elements.has(id))elements.set(id,element());return elements.get(id)}},location:{search:''},elements};}
 test('all browser scripts parse, including inline page scripts',()=>{
  for(const file of fs.readdirSync('static').filter(f=>f.endsWith('.js')))new vm.Script(fs.readFileSync('static/'+file,'utf8'),{filename:file});
@@ -53,4 +53,43 @@ test('selected season follows preseason default then switches to regular when me
  assert.equal(vm.runInContext('seasonView',context),'preseason');
  vm.runInContext("availableSeasons[0].defaultView='regular';defaultSeasonView()",context);
  assert.equal(vm.runInContext('seasonView',context),'regular');
+});
+test('trivia formats NHL player birthplace fields and omits missing ones',()=>{
+ const env=scope();env.window={location:{search:'?team=car'}};
+ env.hockeyFetch=()=>new Promise(()=>{});
+ const context=vm.createContext(env);new vm.Script(fs.readFileSync('static/trivia.js','utf8')).runInContext(context);
+ assert.equal(vm.runInContext("playerBirthplace({birthCity:{default:'Raleigh'},birthStateProvince:{default:'NC'},birthCountry:'USA'})",context),'Raleigh, NC, USA');
+ assert.equal(vm.runInContext('playerBirthplace({})',context),'');
+});
+test('trivia loads a player birthplace before allowing reveal',async()=>{
+ const env=scope();env.window={location:{search:'?team=car'}};
+ let resolvePlayer;
+ env.hockeyFetch=()=>new Promise(resolve=>{resolvePlayer=resolve});
+ const context=vm.createContext(env);new vm.Script(fs.readFileSync('static/trivia.js','utf8')).runInContext(context);
+ vm.runInContext("roster=[{id:7,name:'Player',photo:'/photo.jpg'}]",context);
+ const loaded=vm.runInContext('loadPlayer()',context);
+ assert.equal(env.elements.get('revealBtn').disabled,true);
+ resolvePlayer({json:async()=>({birthCity:{default:'Toronto'},birthStateProvince:{default:'ON'},birthCountry:'CAN'})});
+ await loaded;
+ assert.equal(env.elements.get('playerBirthplace').textContent,'Toronto, ON, CAN');
+ assert.equal(env.elements.get('revealBtn').disabled,false);
+});
+test('player media keeps interviews separate from highlights and uses NHL images',()=>{
+ const context=vm.createContext({...scope(),window:{location:{pathname:'/player/7'},addEventListener(){}}});
+ new vm.Script(fs.readFileSync('static/player.js','utf8')).runInContext(context);
+ assert.equal(vm.runInContext("isPlayerInterview({title:'POST-RAW | Player',tags:[]})",context),true);
+ assert.equal(vm.runInContext("isPlayerInterview({title:'Player scores winning goal',tags:[{slug:'highlight'}]})",context),false);
+ assert.equal(vm.runInContext("playerMediaImage({templateUrl:'https://media.d3.nhle.com/image/private/{formatInstructions}/prd/id'})",context),'https://media.d3.nhle.com/image/private/t_ratio4_3-size20/prd/id');
+ assert.equal(vm.runInContext("playerMediaImage({templateUrl:'https://media.d3.nhle.com/image/private/{formatInstructions}/prd/id'},20,'16_9')",context),'https://media.d3.nhle.com/image/private/t_ratio16_9-size20/prd/id');
+ assert.equal(vm.runInContext("playerMediaImage({templateUrl:'https://other.example/image'})",context),'');
+});
+test('team media selects player interviews and player photos',()=>{
+ const context=vm.createContext({...scope(),window:{}});
+ new vm.Script(fs.readFileSync('static/team-media.js','utf8')).runInContext(context);
+ assert.equal(vm.runInContext("isTeamPlayerInterview({title:'POST-RAW | Player',tags:[{slug:'playerid-7'}]})",context),true);
+ assert.equal(vm.runInContext("isTeamPlayerInterview({title:'POST-RAW | Coach',tags:[{slug:'teamid-22'}]})",context),false);
+ assert.equal(vm.runInContext("isTeamPlayerInterview({title:'Player scores',tags:[{slug:'playerid-7'}]})",context),false);
+ vm.runInContext("teamPlayerIDs=new Set(['7'])",context);
+ assert.equal(vm.runInContext("isTeamPlayerInterview({title:'POST-RAW | Opponent',tags:[{slug:'playerid-8'}]})",context),false);
+ assert.equal(vm.runInContext("teamMediaImage({templateUrl:'https://media.d3.nhle.com/image/private/{formatInstructions}/prd/id'},'16_9')",context),'https://media.d3.nhle.com/image/private/t_ratio16_9-size20/prd/id');
 });

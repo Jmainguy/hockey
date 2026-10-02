@@ -50,6 +50,21 @@ func TestRedisSharesSnapshotsAndDeduplicatesReplicas(t *testing.T) {
 		t.Fatal("restart missed shared cache")
 	}
 }
+func TestExpiredLocalSnapshotUsesFreshSharedSnapshot(t *testing.T) {
+	db := miniredis.RunT(t)
+	a, b := testClient(), testClient()
+	a.redis = redis.NewClient(&redis.Options{Addr: db.Addr()})
+	b.redis = redis.NewClient(&redis.Options{Addr: db.Addr()})
+	defer func() { _ = a.redis.Close(); _ = b.redis.Close() }()
+	key := "shared-resource"
+	a.save(key, []byte(`{"value":"old"}`), -time.Second)
+	time.Sleep(time.Millisecond)
+	b.save(key, []byte(`{"value":"new"}`), time.Minute)
+	e, ok := a.cached(key)
+	if !ok || string(e.Data) != `{"value":"new"}` {
+		t.Fatalf("old local snapshot hid fresh shared data: %s", e.Data)
+	}
+}
 func TestRedisCooldownAppliesAcrossReplicas(t *testing.T) {
 	db := miniredis.RunT(t)
 	var calls atomic.Int32

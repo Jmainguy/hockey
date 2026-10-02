@@ -57,7 +57,7 @@ func TestConcurrentMissesShareOneFetch(t *testing.T) {
 		t.Fatalf("got %d upstream requests, want 1", calls.Load())
 	}
 }
-func TestStaleSnapshotReturnsImmediatelyAndRecovers(t *testing.T) {
+func TestExpiredSnapshotWaitsForRefreshAndRecovers(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -67,18 +67,14 @@ func TestStaleSnapshotReturnsImmediatelyAndRecovers(t *testing.T) {
 	}))
 	defer server.Close()
 	c := testClient()
-	old := c.save(server.URL, []byte(`{"value":"old"}`), -time.Second)
-	begin := time.Now()
-	got, err := c.get(context.Background(), server.URL)
-	if err != nil || string(got.Data) != string(old.Data) || time.Since(begin) > 100*time.Millisecond {
-		t.Fatal("stale cache did not return promptly")
-	}
+	c.save(server.URL, []byte(`{"value":"old"}`), -time.Second)
+	result := make(chan cacheEntry, 1)
+	go func() { got, _ := c.get(context.Background(), server.URL); result <- got }()
 	<-started
 	close(release)
-	waitFetches(t, c)
-	got, err = c.get(context.Background(), server.URL)
-	if err != nil || string(got.Data) != `{"value":"new"}` {
-		t.Fatalf("did not refresh: %s %v", got.Data, err)
+	got := <-result
+	if string(got.Data) != `{"value":"new"}` {
+		t.Fatalf("first request did not receive refreshed data: %s", got.Data)
 	}
 }
 func Test429CooldownProtectsOtherResources(t *testing.T) {

@@ -57,6 +57,9 @@ func newRouter() *mux.Router {
 	router.HandleFunc("/api/prospects/{teamAbbrev}", handleAPIProspects).Methods("GET")
 	router.HandleFunc("/api/player/{playerId}", handleAPIPlayer).Methods("GET")
 	router.HandleFunc("/api/player-bio/{playerId}", handleAPIPlayerBio).Methods("GET")
+	router.HandleFunc("/api/player-media/{playerId}/{kind:videos|photos}", handleAPIPlayerMedia).Methods("GET")
+	router.HandleFunc("/api/team-media/{teamId}/{kind:videos|photos}", handleAPITeamMedia).Methods("GET")
+	router.HandleFunc("/api/player-photo/{assetId:[a-zA-Z0-9]+}", handleAPIPlayerPhoto).Methods("GET")
 	router.HandleFunc("/api/schedule/{date}", handleAPISchedule).Methods("GET")
 	router.HandleFunc("/api/team-schedule/{teamId}", handleAPITeamSchedule).Methods("GET")
 	router.HandleFunc("/api/gamecenter/{gameId}/landing", handleAPIGameLanding).Methods("GET")
@@ -67,6 +70,84 @@ func newRouter() *mux.Router {
 	registerDiscoveryRoutes(router)
 	router.Use(responseHeaders)
 	return router
+}
+
+var forgeBaseURL = "https://forge-dapi.d3.nhle.com/v2/content/en-us"
+var playerImageBaseURL = "https://media.d3.nhle.com/image/private"
+
+func handleAPIPlayerMedia(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	writeForgeMedia(w, r, "playerid-"+vars["playerId"], vars["kind"])
+}
+
+func handleAPITeamMedia(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	team := strings.ToUpper(vars["teamId"])
+	teamID, ok := abbrevToTeamID[team]
+	if !ok {
+		teamID, _ = strconv.Atoi(team)
+	}
+	writeForgeMedia(w, r, fmt.Sprintf("teamid-%d", teamID), vars["kind"])
+}
+
+func writeForgeMedia(w http.ResponseWriter, r *http.Request, tag, kind string) {
+	limit, skip := 50, 0
+	if kind == "photos" {
+		limit = 24
+		if raw := r.URL.Query().Get("skip"); raw != "" {
+			var err error
+			skip, err = strconv.Atoi(raw)
+			if err != nil || skip < 0 || skip > 240 || skip%24 != 0 {
+				http.Error(w, "Invalid photo offset", http.StatusBadRequest)
+				return
+			}
+		}
+	}
+	url := fmt.Sprintf("%s/%s?$limit=%d&tags.slug=%s&$skip=%d", forgeBaseURL, kind, limit, tag, skip)
+	entry, err := upstream.get(r.Context(), url)
+	if err != nil {
+		dataUnavailable(w)
+		return
+	}
+	writeDataHeaders(w, entry)
+	_, _ = w.Write(entry.Data)
+}
+
+func handleAPIPlayerPhoto(w http.ResponseWriter, r *http.Request) {
+	size := r.URL.Query().Get("size")
+	switch size {
+	case "20", "40", "50", "60":
+	default:
+		http.Error(w, "Invalid photo size", http.StatusBadRequest)
+		return
+	}
+	assetID := mux.Vars(r)["assetId"]
+	url := fmt.Sprintf("%s/t_ratio4_3-size%s/prd/%s", playerImageBaseURL, size, assetID)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+	if err != nil {
+		dataUnavailable(w)
+		return
+	}
+	resp, err := (&http.Client{Timeout: 8 * time.Second}).Do(req)
+	if err != nil {
+		dataUnavailable(w)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "image/") {
+		dataUnavailable(w)
+		return
+	}
+	const maxPhotoBytes = 16 << 20
+	image, err := io.ReadAll(io.LimitReader(resp.Body, maxPhotoBytes+1))
+	if err != nil || len(image) > maxPhotoBytes {
+		dataUnavailable(w)
+		return
+	}
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=player-photo-%s-%s.jpg", assetID, size))
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write(image)
 }
 func main() {
 	port := os.Getenv("PORT")
@@ -280,6 +361,7 @@ func handleAPIRoster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Data-Updated", roster.UpdatedAt.UTC().Format(time.RFC3339))
 	if roster.Stale {
 		w.Header().Set("X-Data-Stale", "true")

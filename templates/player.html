@@ -24,6 +24,7 @@
         <nav id="playerStickyNav" aria-label="Player sections" class="hidden sticky top-0 z-40 bg-white/90 backdrop-blur-md rounded-xl shadow-md p-2 mb-6 flex flex-wrap sm:flex-nowrap gap-2">
             <button data-target="overview" class="w-full sm:flex-1 px-4 py-2 rounded-lg font-semibold transition bg-primary text-white">Overview</button>
             <button data-target="biography" class="w-full sm:flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Biography</button>
+            <button data-target="media" class="w-full sm:flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Media</button>
             <button data-target="seasons" class="w-full sm:flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Seasons</button>
             <button id="tabBtnAwardsNav" data-target="awards" class="w-full sm:flex-1 px-4 py-2 rounded-lg font-semibold transition hover:bg-gray-100">Awards</button>
         </nav>
@@ -80,6 +81,18 @@
                                 <div class="text-center text-gray-500 py-6">Loading biography...</div>
                             </div>
                         </section>
+                        <section id="tab-media" data-tab="media" class="tab-panel hidden" aria-labelledby="tabBtnMedia">
+                            <h3 id="tabBtnMedia" class="sr-only">Media</h3>
+                            <section aria-labelledby="playerInterviewsTitle">
+                                <h3 id="playerInterviewsTitle" class="text-xl font-bold text-gray-800 mb-4">Recent interviews</h3>
+                                <div id="playerInterviews" aria-live="polite">Loading interviews…</div>
+                            </section>
+                            <section class="mt-8" aria-labelledby="playerPhotosTitle">
+                                <h3 id="playerPhotosTitle" class="text-xl font-bold text-gray-800 mb-4">Photos</h3>
+                                <div id="playerPhotos" class="grid grid-cols-2 sm:grid-cols-3 gap-3" aria-live="polite">Loading photos…</div>
+                                <button id="playerMorePhotos" type="button" class="hidden mt-4 px-4 py-2 rounded-lg bg-primary text-white">Load more photos</button>
+                            </section>
+                        </section>
                         <section id="tab-seasons" data-tab="seasons" class="tab-panel hidden" aria-labelledby="tabBtnSeasons">
                             <h3 id="tabBtnSeasons" class="sr-only">Seasons</h3>
                             <div>
@@ -99,6 +112,19 @@
             </div>
         </div>
     </div>
+
+    <dialog id="playerPhotoDialog" class="rounded-xl p-4 max-w-4xl w-full" aria-label="Player photo viewer">
+        <div class="flex justify-end"><button id="playerPhotoClose" type="button" aria-label="Close photo viewer" class="px-3 py-1 font-bold">Close</button></div>
+        <img id="playerPhotoLarge" alt="" class="w-full max-h-[75vh] object-contain">
+        <p id="playerPhotoCaption" class="text-center text-sm mt-2"></p>
+        <div id="playerPhotoDownloads" class="flex flex-wrap justify-center gap-2 mt-3" aria-label="Download photo sizes">
+            <a data-size="20" class="px-3 py-2 rounded-lg border border-gray-300" href="#">Download 416 × 312</a>
+            <a data-size="40" class="px-3 py-2 rounded-lg border border-gray-300" href="#">Download 832 × 624</a>
+            <a data-size="50" class="px-3 py-2 rounded-lg border border-gray-300" href="#">Download 1280 × 960</a>
+            <a data-size="60" class="px-3 py-2 rounded-lg border border-gray-300" href="#">Download 1920 × 1440</a>
+        </div>
+        <div class="flex justify-between mt-3"><button id="playerPhotoPrev" type="button" class="px-4 py-2 rounded-lg bg-primary text-white">Previous</button><button id="playerPhotoNext" type="button" class="px-4 py-2 rounded-lg bg-primary text-white">Next</button></div>
+    </dialog>
 
     <script src="/static/team-header.js"></script>
     <script src="/static/player.js"></script>

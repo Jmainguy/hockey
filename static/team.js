@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('prospectsTab')?.addEventListener('click', () => switchTab('prospects'));
         document.getElementById('newsTab')?.addEventListener('click', () => switchTab('news'));
         document.getElementById('transactionsTab')?.addEventListener('click', () => switchTab('transactions'));
+        document.getElementById('mediaTab')?.addEventListener('click', () => switchTab('media'));
     
     // Setup filter buttons
     const filterBtns = document.querySelectorAll('.filter-btn');
@@ -75,6 +76,8 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 async function loadTeamDetails() {
+    document.getElementById('error').classList.add('hidden');
+    document.getElementById('loading').classList.remove('hidden');
     try {
         const response = await hockeyFetch(`/api/team/${currentTeamId}`);
         if (!response.ok) {
@@ -152,8 +155,10 @@ function switchTab(tab) {
     const transactionsContent = document.getElementById('transactionsContent');
     const rosterTab = document.getElementById('rosterTab');
     const prospectsTab = document.getElementById('prospectsTab');
+    const mediaTab = document.getElementById('mediaTab');
     const rosterContent = document.getElementById('rosterContent');
     const prospectsContent = document.getElementById('prospectsContent');
+    const mediaContent = document.getElementById('mediaContent');
     const rosterProspectsSection = document.getElementById('rosterProspectsSection');
     // ensure the roster/prospects tab area is visible by default
     if (rosterProspectsSection) rosterProspectsSection.classList.remove('hidden');
@@ -170,11 +175,13 @@ function switchTab(tab) {
     deactivate(transactionsTab);
     deactivate(rosterTab);
     deactivate(prospectsTab);
+    deactivate(mediaTab);
 
     if (newsContent) newsContent.classList.add('hidden');
     if (transactionsContent) transactionsContent.classList.add('hidden');
     if (rosterContent) rosterContent.classList.add('hidden');
     if (prospectsContent) prospectsContent.classList.add('hidden');
+    if (mediaContent) mediaContent.classList.add('hidden');
 
     // activate the selected tab and show its content
     if (tab === 'news') {
@@ -208,6 +215,14 @@ function switchTab(tab) {
             rosterTab.classList.remove('border-transparent', 'text-gray-500');
         }
         if (rosterContent) rosterContent.classList.remove('hidden');
+        return;
+    }
+
+    if (tab === 'media') {
+        mediaTab.classList.add('border-primary', 'text-primary');
+        mediaTab.classList.remove('border-transparent', 'text-gray-500');
+        mediaContent.classList.remove('hidden');
+        loadTeamMedia();
         return;
     }
 
@@ -583,11 +598,13 @@ let rosterRequest=0;
 async function setupRosterSeasons(){
  const select=document.getElementById('rosterYear');
  select.onchange=()=>loadRoster();
+ loadRoster();
  try {
   const seasons=await(await hockeyFetch(`/api/roster-seasons/${currentTeamId}`)).json();
-  select.replaceChildren(...seasons.sort((a,b)=>b-a).map(id=>{const option=document.createElement('option');option.value=id;option.textContent=String(id).slice(0,4)+'–'+String(id).slice(4);return option;}));
+  const current=seasons.sort((a,b)=>b-a)[0];
+  select.replaceChildren(...seasons.map(id=>{const option=document.createElement('option');option.value=id;option.textContent=String(id).slice(0,4)+'–'+String(id).slice(4);return option;}));
+  if (current) select.value=String(current);
  }catch(_){}
- loadRoster();
 }
 async function loadRoster() {
     const request=++rosterRequest;
@@ -612,6 +629,11 @@ async function loadRoster() {
         console.error('Error loading roster:', error);
         const body = document.getElementById('rosterBody');
         body.innerHTML = '<div class="empty-state">Roster data is temporarily unavailable.</div>';
+        const retry = document.createElement('button');
+        retry.type = 'button'; retry.textContent = 'Try again';
+        retry.className = 'underline font-semibold';
+        retry.addEventListener('click', loadRoster);
+        body.append(retry);
     }
 }
 
@@ -750,6 +772,11 @@ function showError(message) {
     const loading = document.getElementById('loading');
     
     errorDiv.textContent = message;
+    const retry = document.createElement('button');
+    retry.type = 'button'; retry.textContent = 'Try again';
+    retry.className = 'ml-3 underline font-semibold';
+    retry.addEventListener('click', loadTeamDetails);
+    errorDiv.append(retry);
     errorDiv.classList.remove('hidden');
     loading.classList.add('hidden');
 }

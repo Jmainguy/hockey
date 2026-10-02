@@ -84,6 +84,12 @@ async function loadStandings(season = "", phase = "regular") {
         console.error('Error loading standings:', error);
         loading.style.display = 'none';
         errorDiv.textContent = 'Standings are temporarily unavailable.';
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.textContent = 'Try again';
+        retry.className = 'ml-3 underline font-semibold';
+        retry.addEventListener('click', () => loadStandings(season, phase));
+        errorDiv.append(retry);
         errorDiv.classList.remove('hidden');
     }
 }

@@ -23,6 +23,7 @@ import (
 
 const cacheNamespace = "hockey:v2:"
 const maxCacheEntries = 2048
+const staleRefreshWait = 3 * time.Second
 
 type cacheEntry struct {
 	Data       json.RawMessage `json:"data"`
@@ -68,17 +69,21 @@ func (c *upstreamClient) cached(key string) (cacheEntry, bool) {
 	c.mu.Lock()
 	e, ok := c.entries[key]
 	c.mu.Unlock()
-	if ok && time.Now().Before(e.ExpiresAt) {
+	if ok && time.Now().Before(e.FreshUntil) {
 		return e, true
 	}
 	if c.redis != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
 		defer cancel()
 		data, err := c.redis.Get(ctx, redisKey(key)).Bytes()
-		if err == nil && json.Unmarshal(data, &e) == nil && time.Now().Before(e.ExpiresAt) {
-			c.remember(key, e)
-			return e, true
+		var shared cacheEntry
+		if err == nil && json.Unmarshal(data, &shared) == nil && time.Now().Before(shared.ExpiresAt) && (!ok || shared.UpdatedAt.After(e.UpdatedAt)) {
+			c.remember(key, shared)
+			return shared, true
 		}
+	}
+	if ok && time.Now().Before(e.ExpiresAt) {
+		return e, true
 	}
 	return cacheEntry{}, false
 }
@@ -155,7 +160,21 @@ func (c *upstreamClient) get(ctx context.Context, url string) (cacheEntry, error
 	}
 	c.mu.Unlock()
 	if ok {
-		return cached, nil
+		// Give the in-flight refresh a short chance to finish so the first
+		// visit sees current data. Keep the snapshot when upstream is slow.
+		timer := time.NewTimer(staleRefreshWait)
+		defer timer.Stop()
+		select {
+		case <-call.done:
+			if call.err == nil {
+				return call.entry, nil
+			}
+			return cached, nil
+		case <-timer.C:
+			return cached, nil
+		case <-ctx.Done():
+			return cacheEntry{}, ctx.Err()
+		}
 	}
 	select {
 	case <-ctx.Done():

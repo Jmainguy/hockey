@@ -7,6 +7,13 @@ let currentPlayerIndex = 0;
 let revealStep = 0; // 0=nothing, 1=name, 2=number, 3=position, 4=birthplace
 let teamAbbrev = '';
 let teamObj = null; // populated from /api/team response
+const birthplaceCache = new Map();
+let playerLoad = 0;
+function playerBirthplace(details) {
+    const localized = value => typeof value === 'object' ? (value?.default || '') : (value || '');
+    return [details.birthCity, details.birthStateProvince, details.birthCountry]
+        .map(localized).filter(Boolean).join(', ');
+}
 
 // Position mapping
 const positionMap = {
@@ -23,10 +30,11 @@ async function loadTrivia() {
         return;
     }
 
+    document.getElementById('error').classList.add('hidden');
+    document.getElementById('loading').classList.remove('hidden');
     try {
-        // Fetch team details to get abbreviation and name
-        const teamResponse = await hockeyFetch(`/api/team/${teamId}`);
-        if (teamResponse.ok) {
+        // Team identity and roster are independent; load both at once.
+        hockeyFetch(`/api/team/${teamId}`).then(async teamResponse => {
             const teamData = await teamResponse.json();
             if (teamData.teams && teamData.teams.length > 0) {
                 const team = teamData.teams[0];
@@ -36,7 +44,7 @@ async function loadTrivia() {
                 try { document.title = `${team.name} · Trivia`; } catch (e) {}
                 if (window.populateSharedHeader) window.populateSharedHeader(team);
             }
-        }
+        }).catch(() => {});
 
         // Fetch roster data - same as team page
         const response = await hockeyFetch(`/api/roster/${teamId}`);
@@ -67,7 +75,6 @@ async function loadTrivia() {
 
             // Load first player
             loadPlayer();
-                if (window.populateSharedHeader && teamObj) window.populateSharedHeader(teamObj)
         } else {
             showError('No players found in roster');
         }
@@ -76,14 +83,34 @@ async function loadTrivia() {
     }
 }
 
-function loadPlayer() {
+async function loadPlayer() {
     if (currentPlayerIndex >= roster.length) {
         showCompletion();
         return;
     }
 
     const player = roster[currentPlayerIndex];
+    const load = ++playerLoad;
     revealStep = 0;
+    document.getElementById('loading').textContent = 'Loading player details…';
+    document.getElementById('loading').classList.remove('hidden');
+    document.getElementById('triviaSection').classList.add('hidden');
+    document.getElementById('revealBtn').disabled = true;
+    let birthplace = birthplaceCache.get(player.id);
+    if (birthplace === undefined) {
+        try {
+            const response = await hockeyFetch(`/api/player/${player.id}`);
+            const details = await response.json();
+            birthplace = playerBirthplace(details);
+        } catch (_) {
+            birthplace = '';
+        }
+        birthplaceCache.set(player.id, birthplace);
+    }
+    if (load !== playerLoad) return;
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('triviaSection').classList.remove('hidden');
+    document.getElementById('revealBtn').disabled = false;
 
     // Update progress
     document.getElementById('currentQuestion').textContent = currentPlayerIndex + 1;
@@ -99,7 +126,6 @@ function loadPlayer() {
     document.getElementById('playerPosition').textContent = player.fullPosition || player.position || 'Unknown';
     
     // Birth place from player stats/info if available
-    const birthplace = player.birthPlace || 'Unknown';
     document.getElementById('playerBirthplace').textContent = birthplace;
 
     // Reset all boxes to show questions
@@ -146,9 +172,14 @@ function reveal() {
             // Reveal position answer and show birthplace question
             document.getElementById('positionLabel').textContent = 'Position';
             document.getElementById('playerPosition').classList.remove('hidden');
-            document.getElementById('birthplaceQuestion').classList.remove('hidden');
-            document.getElementById('birthplaceLabel').textContent = 'Where were they born?';
-            document.getElementById('playerBirthplace').classList.add('hidden');
+            if (document.getElementById('playerBirthplace').textContent) {
+                document.getElementById('birthplaceQuestion').classList.remove('hidden');
+                document.getElementById('birthplaceLabel').textContent = 'Where were they born?';
+                document.getElementById('playerBirthplace').classList.add('hidden');
+            } else {
+                document.getElementById('revealBtn').classList.add('hidden');
+                document.getElementById('nextBtn').classList.remove('hidden');
+            }
             break;
         case 4:
             // Reveal birthplace answer
@@ -185,6 +216,13 @@ function showError(message) {
     document.getElementById('loading').classList.add('hidden');
     const errorDiv = document.getElementById('error');
     errorDiv.textContent = message;
+    if (teamId) {
+        const retry = document.createElement('button');
+        retry.type = 'button'; retry.textContent = 'Try again';
+        retry.className = 'ml-3 underline font-semibold';
+        retry.addEventListener('click', loadTrivia);
+        errorDiv.append(retry);
+    }
     errorDiv.classList.remove('hidden');
 }
 
