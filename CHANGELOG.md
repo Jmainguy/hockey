@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.15.0](https://github.com/Jmainguy/hockey/compare/v1.14.1...v1.15.0) (2026-10-02)
+
+
+### Features
+
+* add player and team media galleries with fresher data ([229c04b](https://github.com/Jmainguy/hockey/commit/229c04bd07caf6e7e09b21d52ef69cf56a61b98b))
+
+
+### Bug Fixes
+
+* handle photo proxy response close ([faafdaa](https://github.com/Jmainguy/hockey/commit/faafdaacc63bdc3ec7a609dcc883c608c285c0e6))
+
 ## [1.14.1](https://github.com/Jmainguy/hockey/compare/v1.14.0...v1.14.1) (2026-09-22)
 
 
