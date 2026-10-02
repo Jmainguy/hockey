@@ -133,7 +133,7 @@ func handleAPIPlayerPhoto(w http.ResponseWriter, r *http.Request) {
 		dataUnavailable(w)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "image/") {
 		dataUnavailable(w)
 		return
